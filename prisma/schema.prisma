@@ -1,0 +1,146 @@
+// https://www.prisma.io/docs/reference/api-reference/prisma-schema-reference
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  githubId  String   @unique
+  username  String?  // GitHub login, set on first sign-in
+  name      String?
+  email     String?
+  image     String?
+  avatarUrl String?
+  createdAt DateTime @default(now())
+
+  accounts Account[]
+  session  Session[]
+  portfolio Portfolio?
+}
+
+model Account {
+  id                String  @id @default(uuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+model Portfolio {
+  id          String   @id @default(uuid())
+  userId      String   @unique
+  slug        String   @unique
+  theme       String   @default("dark")
+  bio         String?  @db.Text
+  socialsJson String?  @db.Text
+  isPublished Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  repos  PortfolioRepo[]
+}
+
+model PortfolioRepo {
+  id               String    @id @default(uuid())
+  portfolioId      String
+  repoFullName     String
+  branch           String    @default("main")
+  pinnedOrder      Int       @default(0)
+  customTitle      String?
+  customSummary    String?   @db.Text
+  detectedStackJson String?  @db.Text
+  status           RepoStatus @default(QUEUED)
+  runnable         Boolean?
+  createdAt        DateTime  @default(now())
+
+  portfolio Portfolio     @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
+  artifacts RepoArtifact[]
+  jobs      Job[]
+
+  @@unique([portfolioId, repoFullName])
+}
+
+model RepoArtifact {
+  id              String       @id @default(uuid())
+  portfolioRepoId String
+  type            ArtifactType
+  url             String       @db.Text
+  metadata        String?     @db.Text
+  createdAt       DateTime    @default(now())
+
+  portfolioRepo PortfolioRepo @relation(fields: [portfolioRepoId], references: [id], onDelete: Cascade)
+}
+
+model Job {
+  id              String    @id @default(uuid())
+  portfolioRepoId String
+  type           JobType
+  status         JobStatus  @default(QUEUED)
+  progress       Int       @default(0)
+  error          String?   @db.Text
+  createdAt      DateTime  @default(now())
+
+  portfolioRepo PortfolioRepo @relation(fields: [portfolioRepoId], references: [id], onDelete: Cascade)
+}
+
+enum RepoStatus {
+  QUEUED
+  PROCESSING
+  DONE
+  FAILED
+}
+
+enum ArtifactType {
+  screenshot
+  diagram
+  build_log
+}
+
+enum JobType {
+  analyze
+  summary
+  build
+  screenshot
+  diagram
+}
+
+enum JobStatus {
+  QUEUED
+  ACTIVE
+  COMPLETED
+  FAILED
+}
