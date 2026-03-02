@@ -1,9 +1,13 @@
+import "dotenv/config";
+import { config } from "dotenv";
+import path from "path";
+config({ path: path.join(process.cwd(), ".env.local") });
 import { createGenerateWorker, type GenerateJobData } from "../lib/jobQueue";
 import { setRepoStatus, upsertJob } from "./lib/db";
 import { detectStack } from "../lib/stackDetector";
 import { cloneRepo, listFiles, parsePackageJson } from "./jobs/analyze";
 import { runSummary } from "./jobs/summary";
-import { runBuild } from "./jobs/build";
+import { runBuild, cleanupBuild } from "./jobs/build";
 import { runScreenshot } from "./jobs/screenshot";
 import { runDiagram } from "./jobs/diagram";
 
@@ -22,9 +26,19 @@ async function processJob(data: GenerateJobData) {
     await upsertJob(portfolioRepoId, "analyze", "COMPLETED", 100, null);
 
     await runSummary(portfolioRepoId, repoDir, runPlan);
-    await runBuild(portfolioRepoId, repoDir, runPlan);
-    await runScreenshot(portfolioRepoId, repoDir, runPlan);
-    await runDiagram(portfolioRepoId, repoDir);
+    let buildResult: Awaited<ReturnType<typeof runBuild>>;
+    try {
+      buildResult = await runBuild(portfolioRepoId, repoDir, runPlan);
+    } catch {
+      buildResult = { runnable: false };
+    }
+
+    try {
+      await runScreenshot(portfolioRepoId, repoDir, runPlan, buildResult);
+      await runDiagram(portfolioRepoId, repoDir);
+    } finally {
+      await cleanupBuild(buildResult, runPlan, repoDir);
+    }
 
     await setRepoStatus(portfolioRepoId, "DONE");
   } catch (err) {
@@ -35,8 +49,21 @@ async function processJob(data: GenerateJobData) {
 }
 
 const worker = createGenerateWorker(async (job) => {
-  await processJob(job.data);
+  console.log("[Portify worker] Starting job:", job.data.repoFullName);
+  try {
+    await processJob(job.data);
+    console.log("[Portify worker] Done:", job.data.repoFullName);
+  } catch (err) {
+    console.error("[Portify worker] Failed:", job.data.repoFullName, err);
+    throw err;
+  }
 });
 
-worker.run();
-console.log("Portify worker running. Waiting for jobs...");
+worker.on("failed", (job, err) => {
+  console.error("[Portify worker] Job failed:", job?.data?.repoFullName, err?.message);
+});
+
+const redisUrl = process.env.REDIS_URL;
+const redisHost = redisUrl ? new URL(redisUrl).hostname : "localhost";
+console.log("[Portify worker] Redis:", redisHost, redisUrl ? "(Upstash/local)" : "(default localhost)");
+console.log("Portify worker running. Waiting for jobs... (Click Regenerate on a repo in the dashboard to queue one)");

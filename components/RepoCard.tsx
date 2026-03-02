@@ -26,7 +26,8 @@ interface RepoCardProps {
   onGenerate: (id: string) => void;
   onRemove: (id: string) => void;
   onEdit?: (id: string) => void;
-  jobStatus?: { status: string; progress: number };
+  jobStatus?: { status: string; progress: number; stepLabel?: string; error?: string };
+  failureReason?: string;
 }
 
 export function RepoCard({
@@ -36,6 +37,7 @@ export function RepoCard({
   onGenerate,
   onRemove,
   jobStatus,
+  failureReason,
 }: RepoCardProps) {
   const [loading, setLoading] = useState(false);
   const displaySummary = repo.customSummary ?? summary ?? "No description yet.";
@@ -43,7 +45,20 @@ export function RepoCard({
   const stackList = stack ?? (repo.detectedStackJson ? JSON.parse(repo.detectedStackJson) : []) as string[];
   const screenshots = repo.artifacts?.filter((a) => a.type === "screenshot") ?? [];
   const diagram = repo.artifacts?.find((a) => a.type === "diagram");
+  const hasScreenshots = screenshots.length > 0;
+  const isNew = repo.status === "DONE" && !hasScreenshots && !jobStatus;
   const isProcessing = repo.status === "PROCESSING" || jobStatus?.status === "ACTIVE" || jobStatus?.status === "QUEUED";
+  const badgeVariant =
+    isNew
+      ? "secondary"
+      : repo.status === "DONE"
+      ? "success"
+      : repo.status === "FAILED"
+      ? "destructive"
+      : repo.status === "PROCESSING"
+      ? "warning"
+      : "secondary";
+  const badgeLabel = isNew ? "NEW" : repo.status;
 
   async function handleGenerate() {
     setLoading(true);
@@ -63,17 +78,9 @@ export function RepoCard({
         </div>
         <div className="flex items-center gap-2">
           <Badge
-            variant={
-              repo.status === "DONE"
-                ? "success"
-                : repo.status === "FAILED"
-                ? "destructive"
-                : repo.status === "PROCESSING"
-                ? "warning"
-                : "secondary"
-            }
+            variant={badgeVariant}
           >
-            {repo.status}
+            {badgeLabel}
           </Badge>
           <Button variant="ghost" size="icon" asChild>
             <a
@@ -96,6 +103,11 @@ export function RepoCard({
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
+        {(repo.status === "FAILED" && (failureReason || jobStatus?.error)) && (
+          <div className="rounded-md bg-destructive/10 border border-destructive/20 px-3 py-2 text-sm text-destructive">
+            {failureReason ?? jobStatus?.error}
+          </div>
+        )}
         <p className="text-sm text-muted-foreground">{displaySummary}</p>
         {stackList.length > 0 && (
           <div className="flex flex-wrap gap-1">
@@ -109,7 +121,7 @@ export function RepoCard({
         {isProcessing && (
           <div className="space-y-2">
             <Progress value={jobStatus?.progress ?? 0} />
-            <p className="text-xs text-muted-foreground">Generating portfolio assets…</p>
+            <p className="text-xs text-muted-foreground">{jobStatus?.stepLabel ?? "Generating portfolio assets…"}</p>
           </div>
         )}
         {screenshots.length > 0 && <ScreenshotGallery urls={screenshots.map((s) => s.url)} />}
@@ -125,7 +137,7 @@ export function RepoCard({
           ) : (
             <RefreshCw className="mr-2 h-4 w-4" />
           )}
-          {isProcessing ? "Processing…" : "Regenerate"}
+          {isProcessing ? "Processing…" : isNew ? "Generate" : "Regenerate"}
         </Button>
       </CardFooter>
     </Card>

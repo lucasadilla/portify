@@ -17,34 +17,53 @@ export const authOptions: NextAuthOptions = {
           name: profile.name ?? profile.login,
           email: profile.email ?? null,
           image: profile.avatar_url,
-          login: profile.login,
-          avatar_url: profile.avatar_url,
         };
       },
     }),
   ],
   callbacks: {
-    async signIn({ user, account, profile }) {
-      if (account?.provider === "github" && profile && "login" in profile && user.id) {
-        await prisma.user.update({
-          where: { id: user.id },
-          data: {
-            username: (profile as { login?: string }).login ?? user.name ?? undefined,
-            avatarUrl: (profile as { avatar_url?: string }).avatar_url ?? user.image ?? undefined,
-          },
-        }).catch(() => {});
-      }
+    async signIn() {
       return true;
     },
-    async session({ session, user }) {
+    async redirect({ url, baseUrl }) {
+      if (url.startsWith("/")) return `${baseUrl}${url}`;
+      if (new URL(url).origin !== baseUrl) return `${baseUrl}/dashboard`;
+      if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/dashboard`;
+      return url;
+    },
+    async jwt({ token, user, profile }) {
+      if (user) {
+        token.uid = user.id;
+        token.username = (user as { username?: string }).username ?? (user as { name?: string }).name ?? (profile as { login?: string })?.login ?? (token.name as string);
+      }
+      return token;
+    },
+    async session({ session, token }) {
       if (session.user) {
-        session.user.id = user.id;
-        const u = user as { username?: string | null };
-        session.user.username = u.username ?? (user as { name?: string | null }).name ?? "";
+        session.user.id = (token.uid as string) ?? (token.sub as string);
+        session.user.username = (token.username as string) ?? session.user.name ?? "";
       }
       return session;
     },
   },
-  session: { strategy: "database", maxAge: 30 * 24 * 60 * 60 },
+  session: { strategy: "jwt", maxAge: 30 * 24 * 60 * 60 },
+  pages: {
+    error: "/auth-error",
+  },
+  events: {
+    async signIn({ user, account, profile }) {
+      if (!user?.id || account?.provider !== "github") return;
+      const providerAccountId = account.providerAccountId as string;
+      const login = profile && "login" in profile ? (profile as { login: string }).login : user.name ?? null;
+      await prisma.user.update({
+        where: { id: user.id },
+        data: {
+          githubId: providerAccountId,
+          username: login,
+          avatarUrl: user.image ?? undefined,
+        },
+      }).catch(() => {});
+    },
+  },
   secret: process.env.NEXTAUTH_SECRET,
 };

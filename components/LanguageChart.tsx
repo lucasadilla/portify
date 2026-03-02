@@ -33,7 +33,6 @@ export function LanguageChart({ data, className }: LanguageChartProps) {
               paddingAngle={2}
               dataKey="value"
               nameKey="name"
-              label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
             >
               {withColors.map((_, i) => (
                 <Cell key={i} fill={withColors[i].color} />
@@ -41,9 +40,9 @@ export function LanguageChart({ data, className }: LanguageChartProps) {
             </Pie>
             <Tooltip
               contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
-              formatter={(value: number) => [value, "Bytes"]}
+              formatter={(value: number) => [value, "%"]}
             />
-            <Legend />
+            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
           </PieChart>
         </ResponsiveContainer>
       </div>

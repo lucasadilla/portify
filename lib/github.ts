@@ -28,21 +28,153 @@ export async function getRepoLanguages(accessToken: string, owner: string, repo:
   return await res.json();
 }
 
+/** Uses GitHub Stats API: last 52 weeks of commit counts per repo, converted to per-month. Use for single-repo view. */
 export async function getCommitActivity(accessToken: string, owner: string, repo: string): Promise<CommitActivity[]> {
-  const res = await fetch(
-    `${GITHUB_API}/repos/${owner}/${repo}/commits?per_page=100`,
-    { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" } }
-  );
+  const url = `${GITHUB_API}/repos/${owner}/${repo}/stats/commit_activity`;
+  const opts = { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" } };
+  let res = await fetch(url, opts);
+  if (res.status === 202) {
+    await new Promise((r) => setTimeout(r, 2000));
+    res = await fetch(url, opts);
+  }
   if (!res.ok) return [];
-  const data = await res.json();
+  const data = (await res.json()) as { week: number; total: number }[] | null;
+  if (!Array.isArray(data) || data.length === 0) return [];
   const byMonth: Record<string, number> = {};
-  for (const c of data as { commit?: { author?: { date?: string } } }[]) {
-    const date = c.commit?.author?.date;
-    if (date) {
-      const key = date.slice(0, 7);
-      byMonth[key] = (byMonth[key] ?? 0) + 1;
+  for (const w of data) {
+    if (w.week == null || w.total == null) continue;
+    const date = new Date(w.week * 1000);
+    const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+    byMonth[month] = (byMonth[month] ?? 0) + w.total;
+  }
+  return Object.entries(byMonth)
+    .map(([month, count]) => ({ month, count }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+function parseCommitItemsIntoByMonth(
+  items: { commit?: { author?: { date?: string } } }[],
+  byMonth: Record<string, number>
+): void {
+  for (const item of items) {
+    const dateStr = item.commit?.author?.date;
+    if (!dateStr) continue;
+    const month = dateStr.slice(0, 7);
+    byMonth[month] = (byMonth[month] ?? 0) + 1;
+  }
+}
+
+/** Full contribution history: commits by this user across their whole GitHub history. Uses Search API year-by-year, then falls back to last 1000 commits. */
+export async function getContributionHistoryByAuthor(
+  accessToken: string,
+  username: string
+): Promise<CommitActivity[]> {
+  const byMonth: Record<string, number> = {};
+  const perPage = 100;
+  const maxPagesPerYear = 10;
+  const currentYear = new Date().getFullYear();
+  const startYear = 2008;
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/vnd.github.v3+json",
+  };
+
+  const searchYear = async (year: number, q: string): Promise<boolean> => {
+    for (let page = 1; page <= maxPagesPerYear; page++) {
+      const url = `${GITHUB_API}/search/commits?q=${encodeURIComponent(q)}&sort=author-date&order=asc&per_page=${perPage}&page=${page}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return false;
+      const data = (await res.json()) as { items?: { commit?: { author?: { date?: string } } }[] };
+      const items = data.items ?? [];
+      if (items.length === 0) return true;
+      parseCommitItemsIntoByMonth(items, byMonth);
+      if (items.length < perPage) return true;
+    }
+    return true;
+  };
+
+  for (let year = startYear; year <= currentYear; year++) {
+    const from = `${year}-01-01`;
+    const to = `${year}-12-31`;
+    const qRange = `author:${username} author-date:${from}..${to}`;
+    const qGteLte = `author:${username} author-date:>=${from} author-date:<=${to}`;
+    let ok = await searchYear(year, qRange);
+    if (!ok) ok = await searchYear(year, qGteLte);
+    if (!ok) await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 350));
+  }
+
+  if (Object.keys(byMonth).length === 0) {
+    const q = `author:${username}`;
+    for (let page = 1; page <= 10; page++) {
+      const url = `${GITHUB_API}/search/commits?q=${encodeURIComponent(q)}&sort=author-date&order=desc&per_page=${perPage}&page=${page}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) break;
+      const data = (await res.json()) as { items?: { commit?: { author?: { date?: string } } }[] };
+      const items = data.items ?? [];
+      if (items.length === 0) break;
+      parseCommitItemsIntoByMonth(items, byMonth);
+      if (items.length < perPage) break;
     }
   }
+
+  return Object.entries(byMonth)
+    .map(([month, count]) => ({ month, count }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+}
+
+const GITHUB_GRAPHQL = "https://api.github.com/graphql";
+
+/** Fetches contribution history from GraphQL (same data as profile contribution graph). Returns contributions by month. */
+export async function getContributionHistoryFromGraphQL(
+  accessToken: string,
+  username: string
+): Promise<CommitActivity[]> {
+  const byMonth: Record<string, number> = {};
+  const currentYear = new Date().getFullYear();
+  const startYear = 2008;
+
+  const query = `
+    query($login: String!, $from: DateTime!, $to: DateTime!) {
+      user(login: $login) {
+        contributionsCollection(from: $from, to: $to) {
+          contributionCalendar {
+            weeks {
+              contributionDays {
+                date
+                contributionCount
+              }
+            }
+          }
+        }
+      }
+    }
+  `;
+
+  for (let year = startYear; year <= currentYear; year++) {
+    const from = `${year}-01-01T00:00:00Z`;
+    const to = `${year}-12-31T23:59:59Z`;
+    const res = await fetch(GITHUB_GRAPHQL, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ query, variables: { login: username, from, to } }),
+    });
+    if (!res.ok) continue;
+    const body = await res.json();
+    const weeks: { contributionDays?: { date: string; contributionCount: number }[] }[] =
+      body?.data?.user?.contributionsCollection?.contributionCalendar?.weeks ?? [];
+    for (const week of weeks) {
+      for (const day of week.contributionDays ?? []) {
+        const month = day.date.slice(0, 7);
+        byMonth[month] = (byMonth[month] ?? 0) + (day.contributionCount ?? 0);
+      }
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+
   return Object.entries(byMonth)
     .map(([month, count]) => ({ month, count }))
     .sort((a, b) => a.month.localeCompare(b.month));

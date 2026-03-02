@@ -62,6 +62,8 @@ export async function POST(req: NextRequest) {
       repoFullName,
       branch: branch ?? "main",
       pinnedOrder: maxOrder,
+      // Start in an idle state; generation only begins when the user clicks "Generate"
+      status: "DONE",
     },
   });
   return NextResponse.json({ portfolio, repo });

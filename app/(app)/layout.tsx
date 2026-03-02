@@ -28,7 +28,7 @@ export default async function AppLayout({
             </Link>
             {session.user?.username && (
               <Link
-                href={`/u/${session.user.username}`}
+                href={`/u/${session.user.username.replace(/\s+/g, "-").toLowerCase()}`}
                 target="_blank"
                 className="text-muted-foreground hover:text-foreground text-sm"
               >

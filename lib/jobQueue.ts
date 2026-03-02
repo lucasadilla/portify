@@ -8,15 +8,18 @@ export type GenerateJobData = {
   accessToken?: string;
 };
 
-const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
 function getConnection() {
   try {
+    const redisUrl = process.env.REDIS_URL ?? "redis://localhost:6379";
     const u = new URL(redisUrl);
-    return {
+    const port = parseInt(u.port || "6379", 10);
+    const opts: { host: string; port: number; password?: string; tls?: object } = {
       host: u.hostname,
-      port: parseInt(u.port || "6379", 10),
+      port,
       password: u.password || undefined,
     };
+    if (u.protocol === "rediss:") opts.tls = {};
+    return opts;
   } catch {
     return { host: "localhost", port: 6379 };
   }

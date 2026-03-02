@@ -47,8 +47,9 @@
 
 4. **Run**
 
-   - App: `npm run dev`
-   - Worker (separate terminal): `npm run worker` (requires Redis)
+   - **Redis** must be running (e.g. `redis-server` or Docker), or jobs will stay queued.
+   - App: `npm run dev` — in development, the BullMQ worker starts in-process so jobs are processed automatically.
+   - For production (or if you prefer a separate process): run `npm run worker` in another terminal.
 
 5. **Demo**
 

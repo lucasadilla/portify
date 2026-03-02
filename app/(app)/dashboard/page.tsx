@@ -46,7 +46,29 @@ export default function DashboardPage() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState<string | null>(null);
-  const [jobPoll, setJobPoll] = useState<Record<string, { status: string; progress: number }>>({});
+  const JOB_STEPS = ["analyze", "summary", "build", "screenshot", "diagram"] as const;
+  const STEP_LABELS: Record<string, string> = {
+    analyze: "Cloning & analyzing repo",
+    summary: "Generating AI summary",
+    build: "Preparing build",
+    screenshot: "Capturing screenshots",
+    diagram: "Creating architecture diagram",
+  };
+  const [jobPoll, setJobPoll] = useState<Record<string, { status: string; progress: number; error?: string; stepLabel?: string }>>({});
+  const [repoErrors, setRepoErrors] = useState<Record<string, string>>({});
+
+  function jobProgress(repoStatus: string, jobs: { type: string; status: string; progress: number }[]): { progress: number; stepLabel: string } {
+    if (repoStatus === "QUEUED" && !jobs?.length) return { progress: 0, stepLabel: "Queued, waiting for worker…" };
+    if (!jobs?.length) return { progress: 0, stepLabel: "Starting…" };
+    const completed = jobs.filter((j) => j.status === "COMPLETED").length;
+    const active = jobs.find((j) => j.status === "ACTIVE");
+    const stepLabel = active ? STEP_LABELS[active.type] ?? active.type : completed >= JOB_STEPS.length ? "Done" : "Starting…";
+    const pctPerStep = 100 / JOB_STEPS.length;
+    const progress = active
+      ? completed * pctPerStep + (active.progress / 100) * pctPerStep
+      : completed * pctPerStep;
+    return { progress: Math.round(progress), stepLabel };
+  }
 
   const fetchPortfolio = useCallback(async () => {
     const res = await fetch("/api/portfolio/repos");
@@ -80,12 +102,28 @@ export default function DashboardPage() {
     const t = setInterval(async () => {
       for (const id of ids) {
         const r = await fetch(`/api/job-status?id=${id}`).then((x) => x.json());
-        setJobPoll((p) => ({ ...p, [id]: { status: r.status, progress: (r.jobs?.reduce((a: number, j: { progress: number }) => a + j.progress, 0) ?? 0) / (r.jobs?.length || 1) } }));
+        const failedJob = r.jobs?.find((j: { status: string; error?: string }) => j.status === "FAILED" && j.error);
+        const { progress, stepLabel } = jobProgress(r.status, r.jobs ?? []);
+        setJobPoll((p) => ({ ...p, [id]: { status: r.status, progress, stepLabel, error: failedJob?.error } }));
+        if (r.status === "FAILED" && failedJob?.error) setRepoErrors((e) => ({ ...e, [id]: failedJob.error }));
         if (r.status === "DONE" || r.status === "FAILED") await fetchPortfolio();
       }
     }, 2000);
     return () => clearInterval(t);
   }, [portfolio?.repos, fetchPortfolio]);
+
+  useEffect(() => {
+    if (!portfolio?.repos?.length) return;
+    const failedIds = portfolio.repos.filter((r) => r.status === "FAILED").map((r) => r.id);
+    if (failedIds.length === 0) return;
+    (async () => {
+      for (const id of failedIds) {
+        const r = await fetch(`/api/job-status?id=${id}`).then((x) => x.json());
+        const failedJob = r.jobs?.find((j: { status: string; error?: string }) => j.status === "FAILED" && j.error);
+        if (failedJob?.error) setRepoErrors((e) => ({ ...e, [id]: failedJob.error }));
+      }
+    })();
+  }, [portfolio?.repos]);
 
   async function addRepo(repo: GitHubRepo) {
     setAdding(repo.fullName);
@@ -136,6 +174,12 @@ export default function DashboardPage() {
         </p>
       </div>
 
+      {portfolio?.repos && portfolio.repos.some((r) => r.status === "QUEUED" || r.status === "PROCESSING") && (
+        <div className="rounded-lg border border-amber-500/50 bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-200">
+          <strong>Jobs running.</strong> Usually finishes in <strong>1–3 minutes</strong>. If it’s stuck: (1) Ensure <strong>Redis</strong> (e.g. Upstash) and <code className="rounded bg-black/10 px-1">REDIS_URL</code> are set. (2) Run <code className="rounded bg-black/10 px-1">npm run worker</code> in a <strong>separate terminal</strong> and watch for errors (e.g. git, OpenAI key).
+        </div>
+      )}
+
       {portfolio?.repos && portfolio.repos.length > 0 && (
         <div className="space-y-4">
           <h2 className="text-lg font-semibold">Your portfolio repos</h2>
@@ -148,7 +192,8 @@ export default function DashboardPage() {
                 stack={repo.detectedStackJson ? JSON.parse(repo.detectedStackJson) : null}
                 onGenerate={generateRepo}
                 onRemove={removeRepo}
-                jobStatus={jobPoll[repo.id] ? { status: jobPoll[repo.id].status, progress: jobPoll[repo.id].progress } : undefined}
+                jobStatus={jobPoll[repo.id] ? { status: jobPoll[repo.id].status, progress: jobPoll[repo.id].progress, stepLabel: jobPoll[repo.id].stepLabel, error: jobPoll[repo.id].error } : undefined}
+                failureReason={repoErrors[repo.id]}
               />
             ))}
           </div>
