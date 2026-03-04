@@ -17,7 +17,25 @@ export async function getGitHubRepos(accessToken: string): Promise<GitHubRepo[]>
     language: r.language,
     stargazersCount: r.stargazers_count,
     pushedAt: r.pushed_at,
+    createdAt: r.created_at,
   }));
+}
+
+export async function getGitHubUserProfile(
+  accessToken: string
+): Promise<{ login: string; createdAt: string; htmlUrl: string }> {
+  const res = await fetch(`${GITHUB_API}/user`, {
+    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" },
+  });
+  if (!res.ok) {
+    throw new Error("Failed to fetch GitHub user profile");
+  }
+  const data = await res.json();
+  return {
+    login: data.login,
+    createdAt: data.created_at,
+    htmlUrl: data.html_url,
+  };
 }
 
 export async function getRepoLanguages(accessToken: string, owner: string, repo: string): Promise<Record<string, number>> {
@@ -235,6 +253,7 @@ export interface GitHubRepo {
   language: string | null;
   stargazersCount: number;
   pushedAt: string;
+  createdAt: string;
 }
 
 export interface CommitActivity {
@@ -253,4 +272,5 @@ interface RawRepo {
   language: string | null;
   stargazers_count: number;
   pushed_at: string;
+  created_at: string;
 }

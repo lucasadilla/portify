@@ -7,10 +7,12 @@ import { EvolutionGraph } from "@/components/EvolutionGraph";
 import { LanguageChart } from "@/components/LanguageChart";
 import { ArchitectureDiagram } from "@/components/ArchitectureDiagram";
 import { ArrowLeft, Github, ExternalLink } from "lucide-react";
+import { SignedInNav } from "@/components/SignedInNav";
 
 type Props = {
   portfolioSlug: string;
   userName: string;
+  viewerUsername?: string | null;
   repo: {
     title: string;
     repoFullName: string;
@@ -23,7 +25,7 @@ type Props = {
   };
 };
 
-export function ProjectPageView({ portfolioSlug, userName, repo }: Props) {
+export function ProjectPageView({ portfolioSlug, userName, viewerUsername, repo }: Props) {
   const repoUrl = `https://github.com/${repo.repoFullName}`;
 
   return (
@@ -33,21 +35,26 @@ export function ProjectPageView({ portfolioSlug, userName, repo }: Props) {
           <Link href="/" className="font-semibold text-lg tracking-tight">
             Portify
           </Link>
-          <div className="flex items-center gap-4">
-            <Link
-              href={`/u/${portfolioSlug}`}
-              className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1"
-            >
-              <ArrowLeft className="h-4 w-4" /> Back to {userName}&apos;s portfolio
-            </Link>
+          {viewerUsername ? (
+            <SignedInNav username={viewerUsername} />
+          ) : (
             <Link href="/api/auth/signin" className="text-sm text-muted-foreground hover:text-foreground">
               Sign in
             </Link>
-          </div>
+          )}
         </div>
       </header>
 
       <main className="container mx-auto px-4 py-10 max-w-4xl">
+        <div className="mb-3">
+          <Link
+            href={`/u/${portfolioSlug}`}
+            className="inline-flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground"
+          >
+            <ArrowLeft className="h-3 w-3" /> Back to {userName}&apos;s portfolio
+          </Link>
+        </div>
+
         <div className="mb-8">
           <h1 className="text-3xl font-bold mb-2">{repo.title}</h1>
           <a

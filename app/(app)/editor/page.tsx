@@ -24,6 +24,7 @@ export default function EditorPage() {
   const [email, setEmail] = useState("");
   const [website, setWebsite] = useState("");
   const [linkedin, setLinkedin] = useState("");
+  const [github, setGithub] = useState("");
   const [isPublished, setIsPublished] = useState(false);
 
   useEffect(() => {
@@ -37,6 +38,7 @@ export default function EditorPage() {
           setEmail(s.email ?? "");
           setWebsite(s.website ?? "");
           setLinkedin(s.linkedin ?? "");
+          setGithub(s.github ?? "");
           setIsPublished(data.portfolio.isPublished ?? false);
         }
         setLoading(false);
@@ -52,7 +54,7 @@ export default function EditorPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bio,
-          socialsJson: { email, website, linkedin },
+          socialsJson: { email, website, linkedin, github },
           isPublished: isPublished,
         }),
       });
@@ -99,6 +101,10 @@ export default function EditorPage() {
           <div>
             <Label htmlFor="linkedin">LinkedIn</Label>
             <Input id="linkedin" type="url" value={linkedin} onChange={(e) => setLinkedin(e.target.value)} placeholder="https://linkedin.com/in/..." />
+          </div>
+          <div>
+            <Label htmlFor="github">GitHub</Label>
+            <Input id="github" type="url" value={github} onChange={(e) => setGithub(e.target.value)} placeholder="https://github.com/your-handle" />
           </div>
           <div className="flex items-center justify-between">
             <Label htmlFor="publish">Published</Label>

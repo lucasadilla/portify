@@ -1,6 +1,7 @@
 "use client";
 
-import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend } from "recharts";
+import { useState } from "react";
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, Legend, type TooltipProps } from "recharts";
 
 export interface LanguageSlice {
   name: string;
@@ -15,7 +16,23 @@ interface LanguageChartProps {
   className?: string;
 }
 
+type CustomTooltipProps = TooltipProps<number, string>;
+
+function CustomTooltip({ active, payload }: CustomTooltipProps) {
+  if (!active || !payload || payload.length === 0) return null;
+  const item = payload[0];
+  const name = item.name ?? (item.payload as { name?: string })?.name ?? "";
+  const value = item.value as number;
+  return (
+    <div className="rounded-md border border-border bg-card px-3 py-2 text-xs">
+      <div className="font-medium text-foreground">{name}</div>
+      <div className="text-muted-foreground">{value}%</div>
+    </div>
+  );
+}
+
 export function LanguageChart({ data, className }: LanguageChartProps) {
+  const [activeIndex, setActiveIndex] = useState<number | null>(null);
   if (!data.length) return null;
   const withColors = data.map((d, i) => ({ ...d, color: d.color ?? COLORS[i % COLORS.length] }));
   return (
@@ -33,15 +50,24 @@ export function LanguageChart({ data, className }: LanguageChartProps) {
               paddingAngle={2}
               dataKey="value"
               nameKey="name"
+              onMouseLeave={() => setActiveIndex(null)}
             >
-              {withColors.map((_, i) => (
-                <Cell key={i} fill={withColors[i].color} />
-              ))}
+              {withColors.map((slice, i) => {
+                const isActive = activeIndex === null || activeIndex === i;
+                const opacity = activeIndex === null ? 0.9 : isActive ? 1 : 0.35;
+                return (
+                  <Cell
+                    key={slice.name}
+                    fill={slice.color}
+                    fillOpacity={opacity}
+                    stroke={slice.color}
+                    strokeWidth={activeIndex === i ? 2 : 1}
+                    onMouseEnter={() => setActiveIndex(i)}
+                  />
+                );
+              })}
             </Pie>
-            <Tooltip
-              contentStyle={{ backgroundColor: "hsl(var(--card))", border: "1px solid hsl(var(--border))" }}
-              formatter={(value: number) => [value, "%"]}
-            />
+            <Tooltip content={<CustomTooltip />} />
             <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
           </PieChart>
         </ResponsiveContainer>

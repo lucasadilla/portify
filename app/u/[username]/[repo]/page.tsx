@@ -1,5 +1,6 @@
 import { notFound } from "next/navigation";
-import Link from "next/link";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getAccessTokenForUser } from "@/lib/session";
 import { getRepoCommitHistory, getRepoLanguages } from "@/lib/github";
@@ -11,6 +12,8 @@ export default async function ProjectPage({
   params: Promise<{ username: string; repo: string }>;
 }) {
   const { username, repo: repoSegment } = await params;
+  const viewerSession = await getServerSession(authOptions);
+  const viewerUsername = viewerSession?.user?.username ?? viewerSession?.user?.name ?? null;
   const slug = username.toLowerCase().trim();
   const repoName = decodeURIComponent(repoSegment);
 
@@ -88,6 +91,7 @@ export default async function ProjectPage({
     <ProjectPageView
       portfolioSlug={portfolio.slug}
       userName={portfolio.user.name ?? portfolio.user.username ?? "Developer"}
+      viewerUsername={viewerUsername}
       repo={{
         title: repo.customTitle ?? repo.repoFullName.split("/")[1] ?? repoName,
         repoFullName: repo.repoFullName,
