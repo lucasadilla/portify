@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { SignedInNav } from "@/components/SignedInNav";
 
 const SIGNIN_URL = "/api/auth/signin/github?callbackUrl=/dashboard";
 
@@ -14,35 +15,21 @@ export default async function HomePage() {
           <Link href="/" className="font-semibold text-lg tracking-tight">
             Portify
           </Link>
-          <nav className="flex items-center gap-4">
-            <Link href="/u/demo" className="text-muted-foreground hover:text-foreground text-sm">
-              View demo
-            </Link>
-            {session ? (
-              <>
-                <Link href="/dashboard" className="text-muted-foreground hover:text-foreground text-sm">
-                  Dashboard
-                </Link>
-                {session.user?.username && (
-                  <Link href={`/u/${session.user.username.replace(/\s+/g, "-").toLowerCase()}`} className="text-muted-foreground hover:text-foreground text-sm" target="_blank">
-                    My portfolio
-                  </Link>
-                )}
-                <form action="/api/auth/signout" method="POST">
-                  <button type="submit" className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90">
-                    Sign out
-                  </button>
-                </form>
-              </>
-            ) : (
+          {session ? (
+            <SignedInNav username={session.user?.username ?? session.user?.name ?? null} />
+          ) : (
+            <nav className="flex items-center gap-4">
+              <Link href="/u/demo" className="text-muted-foreground hover:text-foreground text-sm">
+                View demo
+              </Link>
               <a
                 href={SIGNIN_URL}
                 className="inline-flex items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground hover:bg-primary/90"
               >
                 Sign in with GitHub
               </a>
-            )}
-          </nav>
+            </nav>
+          )}
         </div>
       </header>
 

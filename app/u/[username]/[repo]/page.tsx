@@ -2,7 +2,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { getAccessTokenForUser } from "@/lib/session";
-import { getCommitActivity, getRepoLanguages } from "@/lib/github";
+import { getRepoCommitHistory, getRepoLanguages } from "@/lib/github";
 import { ProjectPageView } from "./ProjectPageView";
 
 export default async function ProjectPage({
@@ -42,7 +42,7 @@ export default async function ProjectPage({
   if (token && owner) {
     try {
       const [activity, langs] = await Promise.all([
-        getCommitActivity(token, owner, repoName),
+        getRepoCommitHistory(token, owner, repoName),
         getRepoLanguages(token, owner, repoName),
       ]);
       commitData = activity

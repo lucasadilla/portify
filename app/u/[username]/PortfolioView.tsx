@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScreenshotGallery } from "@/components/ScreenshotGallery";
@@ -37,6 +38,7 @@ type Props = {
   evolutionData?: EvolutionPoint[];
   languageData?: LanguageSlice[];
   commitsTimeRange?: "all" | "year";
+  viewerUsername?: string | null;
 };
 
 const MOCK_EVOLUTION: EvolutionPoint[] = [
@@ -53,7 +55,15 @@ const MOCK_LANGUAGES: LanguageSlice[] = [
   { name: "Other", value: 15 },
 ];
 
-export function PortfolioView({ portfolio, isUnpublished, evolutionData = [], languageData = [], commitsTimeRange = "year" }: Props) {
+export function PortfolioView({
+  portfolio,
+  isUnpublished,
+  evolutionData = [],
+  languageData = [],
+  commitsTimeRange = "year",
+  viewerUsername,
+}: Props) {
+  const router = useRouter();
   const { user, repos, bio, socials } = portfolio;
   const screenshotsByRepo = repos.map((r) => r.artifacts.filter((a) => a.type === "screenshot").map((a) => a.url));
   const diagramByRepo = repos.map((r) => r.artifacts.find((a) => a.type === "diagram"));
@@ -78,9 +88,26 @@ export function PortfolioView({ portfolio, isUnpublished, evolutionData = [], la
           <Link href="/" className="font-semibold text-lg tracking-tight">
             Portify
           </Link>
-          <Link href="/api/auth/signin" className="text-sm text-muted-foreground hover:text-foreground">
-            Sign in
-          </Link>
+          {viewerUsername ? (
+            <nav className="flex items-center gap-4 text-sm text-muted-foreground">
+              <Link href="/dashboard" className="hover:text-foreground">
+                Dashboard
+              </Link>
+              <Link href="/editor" className="hover:text-foreground">
+                Editor
+              </Link>
+              <Link
+                href={`/u/${viewerUsername.replace(/\s+/g, "-").toLowerCase()}`}
+                className="hover:text-foreground"
+              >
+                View portfolio
+              </Link>
+            </nav>
+          ) : (
+            <Link href="/api/auth/signin" className="text-sm text-muted-foreground hover:text-foreground">
+              Sign in
+            </Link>
+          )}
         </div>
       </header>
 
@@ -146,26 +173,29 @@ export function PortfolioView({ portfolio, isUnpublished, evolutionData = [], la
             const screenshots = repo.artifacts.filter((a) => a.type === "screenshot").map((a) => a.url);
             const diagram = repo.artifacts.find((a) => a.type === "diagram");
             return (
-              <Card key={repo.id} className="transition-colors hover:bg-muted/50">
+              <Card
+                key={repo.id}
+                className="transition-colors hover:bg-muted/50 cursor-pointer"
+                onClick={() => router.push(projectHref)}
+                role="button"
+                tabIndex={0}
+              >
                 <CardHeader className="flex flex-row items-start justify-between gap-4">
                   <div>
-                    <Link href={projectHref}>
-                      <h3 className="text-xl font-semibold hover:underline">{title}</h3>
-                    </Link>
+                    <h3 className="text-xl font-semibold hover:underline">{title}</h3>
                     <a
                       href={`https://github.com/${repo.repoFullName}`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 w-fit"
+                      onClick={(e) => e.stopPropagation()}
                     >
                       <Github className="h-4 w-4" /> {repo.repoFullName}
                     </a>
                   </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                  <Link href={projectHref} className="block">
-                    <p className="text-muted-foreground line-clamp-2 hover:text-foreground">{summary}</p>
-                  </Link>
+                  <p className="text-muted-foreground line-clamp-2 hover:text-foreground">{summary}</p>
                   {stack.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {stack.slice(0, 5).map((s) => (
@@ -177,9 +207,6 @@ export function PortfolioView({ portfolio, isUnpublished, evolutionData = [], la
                   )}
                   {screenshots.length > 0 && <ScreenshotGallery urls={screenshots.slice(0, 3)} />}
                   {diagram && <ArchitectureDiagram url={diagram.url} />}
-                  <Link href={projectHref} className="text-sm font-medium text-primary hover:underline">
-                    View project →
-                  </Link>
                 </CardContent>
               </Card>
             );

@@ -47,26 +47,55 @@ export function detectStack(files: string[], packageJson?: Record<string, unknow
       plan.framework = "next";
       plan.packageManager = fileSet.has("yarn.lock") ? "yarn" : fileSet.has("pnpm-lock.yaml") ? "pnpm" : "npm";
       plan.installCommand = plan.packageManager === "yarn" ? "yarn" : plan.packageManager === "pnpm" ? "pnpm i" : "npm ci";
-      plan.buildCommand = scripts["build"] ?? (plan.packageManager === "yarn" ? "yarn build" : plan.packageManager === "pnpm" ? "pnpm build" : "npm run build");
-      plan.startCommand = scripts["start"] ?? (plan.packageManager === "yarn" ? "yarn start" : plan.packageManager === "pnpm" ? "pnpm start" : "npm start");
-      plan.startCommandForRun = plan.startCommand ?? "npm start";
+      // Prefer dev server when there's no explicit start, so we can run more apps out of the box.
+      if (scripts["start"]) {
+        plan.buildCommand =
+          scripts["build"] ??
+          (plan.packageManager === "yarn"
+            ? "yarn build"
+            : plan.packageManager === "pnpm"
+            ? "pnpm build"
+            : "npm run build");
+        plan.startCommand = scripts["start"];
+        plan.startCommandForRun = plan.startCommand;
+      } else if (scripts["dev"]) {
+        // No start script – use dev server and skip build step.
+        plan.buildCommand = undefined;
+        plan.startCommand = `npm run dev`;
+        plan.startCommandForRun = plan.startCommand;
+      }
       plan.likelyPort = 3000;
       plan.port = 3000;
     } else if (deps["vite"] || deps["react"]) {
       plan.framework = "vite";
       plan.packageManager = fileSet.has("yarn.lock") ? "yarn" : fileSet.has("pnpm-lock.yaml") ? "pnpm" : "npm";
       plan.installCommand = plan.packageManager === "yarn" ? "yarn" : plan.packageManager === "pnpm" ? "pnpm i" : "npm ci";
-      plan.buildCommand = scripts["build"] ?? "npm run build";
-      plan.startCommand = scripts["preview"] ?? "npm run preview";
-      plan.startCommandForRun = plan.startCommand ?? "npm run preview";
-      plan.likelyPort = 5173;
-      plan.port = 5173;
+      if (scripts["dev"]) {
+        // Most simple frontends only need dev server for screenshots.
+        plan.buildCommand = undefined;
+        plan.startCommand = `${plan.packageManager === "yarn" ? "yarn dev" : plan.packageManager === "pnpm" ? "pnpm dev" : "npm run dev"}`;
+        plan.startCommandForRun = plan.startCommand;
+      } else {
+        plan.buildCommand = scripts["build"] ?? "npm run build";
+        plan.startCommand = scripts["preview"] ?? "npm run preview";
+        plan.startCommandForRun = plan.startCommand ?? "npm run preview";
+      }
+      // Vite default ports
+      plan.likelyPort = deps["vite"] ? 5173 : 3000;
+      plan.port = plan.likelyPort;
     } else if (scripts["build"] || scripts["start"]) {
       plan.packageManager = fileSet.has("yarn.lock") ? "yarn" : fileSet.has("pnpm-lock.yaml") ? "pnpm" : "npm";
       plan.installCommand = plan.packageManager === "yarn" ? "yarn" : plan.packageManager === "pnpm" ? "pnpm i" : "npm ci";
-      plan.buildCommand = scripts["build"];
-      plan.startCommand = scripts["start"];
-      plan.startCommandForRun = plan.startCommand ?? "npm start";
+      if (scripts["start"]) {
+        plan.buildCommand = scripts["build"];
+        plan.startCommand = scripts["start"];
+        plan.startCommandForRun = plan.startCommand ?? "npm start";
+      } else if (scripts["dev"]) {
+        // If there's no start but there is dev, use dev and skip build.
+        plan.buildCommand = undefined;
+        plan.startCommand = "npm run dev";
+        plan.startCommandForRun = plan.startCommand;
+      }
       plan.likelyPort = 3000;
       plan.port = 3000;
     }

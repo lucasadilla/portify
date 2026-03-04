@@ -28,25 +28,69 @@ export async function getRepoLanguages(accessToken: string, owner: string, repo:
   return await res.json();
 }
 
-/** Uses GitHub Stats API: last 52 weeks of commit counts per repo, converted to per-month. Use for single-repo view. */
-export async function getCommitActivity(accessToken: string, owner: string, repo: string): Promise<CommitActivity[]> {
-  const url = `${GITHUB_API}/repos/${owner}/${repo}/stats/commit_activity`;
-  const opts = { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" } };
-  let res = await fetch(url, opts);
-  if (res.status === 202) {
-    await new Promise((r) => setTimeout(r, 2000));
-    res = await fetch(url, opts);
-  }
-  if (!res.ok) return [];
-  const data = (await res.json()) as { week: number; total: number }[] | null;
-  if (!Array.isArray(data) || data.length === 0) return [];
+/** Full commit history for a single repo: all years via Search API, then falls back to Stats API (last 52 weeks). */
+export async function getRepoCommitHistory(
+  accessToken: string,
+  owner: string,
+  repo: string
+): Promise<CommitActivity[]> {
   const byMonth: Record<string, number> = {};
-  for (const w of data) {
-    if (w.week == null || w.total == null) continue;
-    const date = new Date(w.week * 1000);
-    const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-    byMonth[month] = (byMonth[month] ?? 0) + w.total;
+  const perPage = 100;
+  const maxPagesPerYear = 10;
+  const currentYear = new Date().getFullYear();
+  const startYear = 2008;
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/vnd.github.v3+json",
+  };
+
+  const searchYear = async (year: number): Promise<boolean> => {
+    const from = `${year}-01-01`;
+    const to = `${year}-12-31`;
+    const q = `repo:${owner}/${repo} committer-date:${from}..${to}`;
+    for (let page = 1; page <= maxPagesPerYear; page++) {
+      const url = `${GITHUB_API}/search/commits?q=${encodeURIComponent(
+        q
+      )}&sort=committer-date&order=asc&per_page=${perPage}&page=${page}`;
+      const res = await fetch(url, { headers });
+      if (!res.ok) return false;
+      const data = (await res.json()) as { items?: { commit?: { author?: { date?: string } } }[] };
+      const items = data.items ?? [];
+      if (items.length === 0) return true;
+      parseCommitItemsIntoByMonth(items, byMonth);
+      if (items.length < perPage) return true;
+    }
+    return true;
+  };
+
+  for (let year = startYear; year <= currentYear; year++) {
+    const ok = await searchYear(year);
+    if (!ok) await new Promise((r) => setTimeout(r, 500));
+    await new Promise((r) => setTimeout(r, 200));
   }
+
+  // If Search API fails or returns nothing, fall back to Stats API (52 weeks).
+  if (Object.keys(byMonth).length === 0) {
+    const url = `${GITHUB_API}/repos/${owner}/${repo}/stats/commit_activity`;
+    const opts = { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" } };
+    let res = await fetch(url, opts);
+    if (res.status === 202) {
+      await new Promise((r) => setTimeout(r, 2000));
+      res = await fetch(url, opts);
+    }
+    if (res.ok) {
+      const data = (await res.json()) as { week: number; total: number }[] | null;
+      if (Array.isArray(data) && data.length > 0) {
+        for (const w of data) {
+          if (w.week == null || w.total == null) continue;
+          const date = new Date(w.week * 1000);
+          const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+          byMonth[month] = (byMonth[month] ?? 0) + w.total;
+        }
+      }
+    }
+  }
+
   return Object.entries(byMonth)
     .map(([month, count]) => ({ month, count }))
     .sort((a, b) => a.month.localeCompare(b.month));
