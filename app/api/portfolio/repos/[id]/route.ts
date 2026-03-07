@@ -20,16 +20,44 @@ export async function PATCH(
   }
 
   const body = await req.json();
-  const { customTitle, customSummary, pinnedOrder } = body as {
+  const {
+    customTitle,
+    customSummary,
+    pinnedOrder,
+    projectWebsiteUrl,
+    showCommitsGraph,
+    showLanguagesGraph,
+    showScreenshots,
+    showDiagram,
+  } = body as {
     customTitle?: string;
     customSummary?: string;
     pinnedOrder?: number;
+    projectWebsiteUrl?: string | null;
+    showCommitsGraph?: boolean;
+    showLanguagesGraph?: boolean;
+    showScreenshots?: boolean;
+    showDiagram?: boolean;
   };
 
-  const data: { customTitle?: string; customSummary?: string; pinnedOrder?: number } = {};
+  const data: {
+    customTitle?: string;
+    customSummary?: string;
+    pinnedOrder?: number;
+    projectWebsiteUrl?: string | null;
+    showCommitsGraph?: boolean;
+    showLanguagesGraph?: boolean;
+    showScreenshots?: boolean;
+    showDiagram?: boolean;
+  } = {};
   if (customTitle !== undefined) data.customTitle = customTitle;
   if (customSummary !== undefined) data.customSummary = customSummary;
   if (pinnedOrder !== undefined) data.pinnedOrder = pinnedOrder;
+  if (projectWebsiteUrl !== undefined) data.projectWebsiteUrl = projectWebsiteUrl === "" ? null : projectWebsiteUrl;
+  if (showCommitsGraph !== undefined) data.showCommitsGraph = showCommitsGraph;
+  if (showLanguagesGraph !== undefined) data.showLanguagesGraph = showLanguagesGraph;
+  if (showScreenshots !== undefined) data.showScreenshots = showScreenshots;
+  if (showDiagram !== undefined) data.showDiagram = showDiagram;
 
   const updated = await prisma.portfolioRepo.update({
     where: { id },

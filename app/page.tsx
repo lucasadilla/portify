@@ -3,7 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { SignedInNav } from "@/components/SignedInNav";
 
-const SIGNIN_URL = "/api/auth/signin/github?callbackUrl=/dashboard";
+const SIGNIN_URL = "/api/auth/signin/github?callbackUrl=/generate";
 
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
@@ -19,7 +19,7 @@ export default async function HomePage() {
             <SignedInNav username={session.user?.username ?? session.user?.name ?? null} />
           ) : (
             <nav className="flex items-center gap-4">
-              <Link href="/u/demo" className="text-muted-foreground hover:text-foreground text-sm">
+              <Link href="/demo" className="text-muted-foreground hover:text-foreground text-sm">
                 View demo
               </Link>
               <a
@@ -39,20 +39,20 @@ export default async function HomePage() {
         </h1>
         <p className="text-xl text-muted-foreground max-w-2xl mb-8">
           Portify turns your GitHub activity into a live, structured portfolio — AI summaries,
-          tech stack detection, screenshots, and evolution graphs.
+          tech stack detection, and evolution graphs.
         </p>
         <div className="flex flex-col sm:flex-row gap-4">
           {session ? (
             <>
               <Link
-                href="/dashboard"
+                href="/generate"
                 className="inline-flex items-center justify-center rounded-md bg-primary px-6 py-3 text-base font-medium text-primary-foreground hover:bg-primary/90"
               >
-                Go to Dashboard
+                Generate portfolio
               </Link>
               {session.user?.username && (
                 <Link
-                  href={`/u/${session.user.username.replace(/\s+/g, "-").toLowerCase()}`}
+                  href={`/${session.user.username.replace(/\s+/g, "-").toLowerCase()}`}
                   className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-3 text-base font-medium hover:bg-accent"
                   target="_blank"
                 >
@@ -69,7 +69,7 @@ export default async function HomePage() {
                 Get started with GitHub
               </a>
               <Link
-                href="/u/demo"
+                href="/demo"
                 className="inline-flex items-center justify-center rounded-md border border-input bg-background px-6 py-3 text-base font-medium hover:bg-accent"
               >
                 View sample portfolio
@@ -88,7 +88,7 @@ export default async function HomePage() {
           <div className="rounded-lg border border-border bg-card p-6">
             <h3 className="font-semibold mb-2">Screenshots & diagrams</h3>
             <p className="text-sm text-muted-foreground">
-              Auto-captured screenshots and Mermaid architecture diagrams.
+              Add your own screenshots and Mermaid architecture diagrams.
             </p>
           </div>
           <div className="rounded-lg border border-border bg-card p-6">

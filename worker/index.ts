@@ -8,7 +8,6 @@ import { detectStack } from "../lib/stackDetector";
 import { cloneRepo, listFiles, parsePackageJson } from "./jobs/analyze";
 import { runSummary } from "./jobs/summary";
 import { runBuild, cleanupBuild } from "./jobs/build";
-import { runScreenshot } from "./jobs/screenshot";
 import { runDiagram } from "./jobs/diagram";
 
 async function processJob(data: GenerateJobData) {
@@ -34,7 +33,6 @@ async function processJob(data: GenerateJobData) {
     }
 
     try {
-      await runScreenshot(portfolioRepoId, repoDir, runPlan, buildResult);
       await runDiagram(portfolioRepoId, repoDir);
     } finally {
       await cleanupBuild(buildResult, runPlan, repoDir);

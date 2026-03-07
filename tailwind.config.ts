@@ -23,6 +23,18 @@ const config: Config = {
         card: { DEFAULT: "hsl(var(--card))", foreground: "hsl(var(--card-foreground))" },
       },
       borderRadius: { lg: "var(--radius)", md: "calc(var(--radius) - 2px)", sm: "calc(var(--radius) - 4px)" },
+      keyframes: {
+        "mesh-1": { "0%, 100%": { transform: "translate(0, 0) scale(1)" }, "33%": { transform: "translate(5%, -5%) scale(1.05)" }, "66%": { transform: "translate(-3%, 3%) scale(0.98)" } },
+        "mesh-2": { "0%, 100%": { transform: "translate(0, 0) scale(1)" }, "33%": { transform: "translate(-4%, 4%) scale(1.02)" }, "66%": { transform: "translate(3%, -2%) scale(0.99)" } },
+        "mesh-3": { "0%, 100%": { transform: "translate(-50%, -50%) scale(1)" }, "50%": { transform: "translate(-50%, -50%) scale(1.08)" } },
+        "gradient-lines-slide": { "0%": { transform: "translateX(0)" }, "100%": { transform: "translateX(82px)" } },
+      },
+      animation: {
+        "mesh-1": "mesh-1 15s ease-in-out infinite",
+        "mesh-2": "mesh-2 18s ease-in-out infinite",
+        "mesh-3": "mesh-3 12s ease-in-out infinite",
+        "gradient-lines-slide": "gradient-lines-slide 25s linear infinite",
+      },
     },
   },
   plugins: [require("tailwindcss-animate")],

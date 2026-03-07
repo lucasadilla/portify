@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Card, CardContent, CardFooter, CardHeader } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { getTechBadgeClassName } from "@/lib/badgeColors";
 import { Progress } from "@/components/ui/progress";
 import { Loader2, RefreshCw, ExternalLink, Trash2 } from "lucide-react";
 import { ScreenshotGallery } from "./ScreenshotGallery";
@@ -112,7 +113,7 @@ export function RepoCard({
         {stackList.length > 0 && (
           <div className="flex flex-wrap gap-1">
             {stackList.map((s) => (
-              <Badge key={s} variant="outline" className="text-xs">
+              <Badge key={s} variant="outline" className={`text-xs ${getTechBadgeClassName(s)}`}>
                 {s}
               </Badge>
             ))}

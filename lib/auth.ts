@@ -27,8 +27,8 @@ export const authOptions: NextAuthOptions = {
     },
     async redirect({ url, baseUrl }) {
       if (url.startsWith("/")) return `${baseUrl}${url}`;
-      if (new URL(url).origin !== baseUrl) return `${baseUrl}/dashboard`;
-      if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/dashboard`;
+      if (new URL(url).origin !== baseUrl) return `${baseUrl}/generate`;
+      if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/generate`;
       return url;
     },
     async jwt({ token, user, profile }) {

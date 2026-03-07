@@ -11,18 +11,68 @@ export async function PATCH(req: NextRequest) {
   if (!portfolio) return NextResponse.json({ error: "No portfolio" }, { status: 404 });
 
   const body = await req.json();
-  const { bio, socialsJson, isPublished, theme } = body as {
+  const {
+    bio,
+    socialsJson,
+    isPublished,
+    theme,
+    slug: newSlug,
+    backgroundStyle: bgStyle,
+    backgroundOptionsJson: bgOptions,
+    displayName,
+    imageUrl,
+  } = body as {
     bio?: string;
     socialsJson?: Record<string, string>;
     isPublished?: boolean;
     theme?: string;
+    slug?: string;
+    backgroundStyle?: string;
+    backgroundOptionsJson?: string | null;
+    displayName?: string | null;
+    imageUrl?: string | null;
   };
 
-  const data: { bio?: string; socialsJson?: string; isPublished?: boolean; theme?: string } = {};
+  const data: {
+    bio?: string;
+    socialsJson?: string;
+    isPublished?: boolean;
+    theme?: string;
+    slug?: string;
+    backgroundStyle?: string;
+    backgroundOptionsJson?: string | null;
+    displayName?: string | null;
+    imageUrl?: string | null;
+  } = {};
   if (bio !== undefined) data.bio = bio;
   if (socialsJson !== undefined) data.socialsJson = JSON.stringify(socialsJson);
   if (isPublished !== undefined) data.isPublished = isPublished;
   if (theme !== undefined) data.theme = theme;
+  if (bgStyle !== undefined) data.backgroundStyle = bgStyle;
+  if (bgOptions !== undefined) data.backgroundOptionsJson = bgOptions === "" ? null : bgOptions;
+  if (displayName !== undefined) data.displayName = displayName === "" ? null : displayName;
+  if (imageUrl !== undefined) data.imageUrl = imageUrl === "" ? null : imageUrl;
+
+  if (newSlug !== undefined) {
+    const slug = newSlug.trim().toLowerCase().replace(/\s+/g, "-");
+    if (slug.length < 2) {
+      return NextResponse.json({ error: "URL name must be at least 2 characters" }, { status: 400 });
+    }
+    if (!/^[a-z0-9-]+$/.test(slug)) {
+      return NextResponse.json(
+        { error: "URL name can only contain lowercase letters, numbers, and hyphens" },
+        { status: 400 }
+      );
+    }
+    if (["demo", "u", "api", "dashboard", "editor"].includes(slug)) {
+      return NextResponse.json({ error: "This URL name is reserved" }, { status: 400 });
+    }
+    const existing = await prisma.portfolio.findUnique({ where: { slug } });
+    if (existing && existing.id !== portfolio.id) {
+      return NextResponse.json({ error: "This URL name is already taken" }, { status: 400 });
+    }
+    data.slug = slug;
+  }
 
   const updated = await prisma.portfolio.update({
     where: { id: portfolio.id },

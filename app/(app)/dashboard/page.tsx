@@ -46,12 +46,11 @@ export default function DashboardPage() {
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [loading, setLoading] = useState(true);
   const [adding, setAdding] = useState<string | null>(null);
-  const JOB_STEPS = ["analyze", "summary", "build", "screenshot", "diagram"] as const;
+  const JOB_STEPS = ["analyze", "summary", "build", "diagram"] as const;
   const STEP_LABELS: Record<string, string> = {
     analyze: "Cloning & analyzing repo",
     summary: "Generating AI summary",
     build: "Preparing build",
-    screenshot: "Capturing screenshots",
     diagram: "Creating architecture diagram",
   };
   const [jobPoll, setJobPoll] = useState<Record<string, { status: string; progress: number; error?: string; stepLabel?: string }>>({});
@@ -170,7 +169,7 @@ export default function DashboardPage() {
         <h1 className="text-2xl font-bold mb-2">Dashboard</h1>
         <p className="text-muted-foreground">
           Add repos from GitHub and generate your portfolio. Your portfolio will be live at{" "}
-          <strong>portify.dev/u/{portfolio?.slug ?? "username"}</strong>.
+          <strong>portify.dev/{portfolio?.slug ?? "username"}</strong>.
         </p>
       </div>
 

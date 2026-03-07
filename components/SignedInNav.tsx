@@ -14,15 +14,15 @@ export function SignedInNav({ username }: SignedInNavProps) {
 
   return (
     <nav className="flex items-center gap-4">
-      <Link href="/dashboard" className="text-muted-foreground hover:text-foreground text-sm">
-        Dashboard
+      <Link href="/generate" className="text-muted-foreground hover:text-foreground text-sm">
+        Generate
       </Link>
-      <Link href="/editor" className="text-muted-foreground hover:text-foreground text-sm">
-        Editor
+      <Link href="/settings" className="text-muted-foreground hover:text-foreground text-sm">
+        Settings
       </Link>
       {slug && (
         <Link
-          href={`/u/${slug}`}
+          href={`/${slug}`}
           target="_blank"
           className="text-muted-foreground hover:text-foreground text-sm"
         >

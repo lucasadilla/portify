@@ -8,7 +8,7 @@
 - **AI summaries** — OpenAI-generated project summaries and tech stack
 - **Screenshots & diagrams** — Placeholder pipeline (Playwright + Mermaid in production)
 - **Evolution graph** — Commits over time and language distribution (Recharts)
-- **Public URL** — `portify.dev/u/{username}` (or your host)
+- **Public URL** — `portify.dev/{username}` (or your host)
 
 ## Tech stack
 
@@ -54,7 +54,7 @@
 5. **Demo**
 
    - Home: Sign in with GitHub, add repos, click Regenerate.
-   - Public portfolio: `/u/demo` (static demo) or `/u/{your-username}` after publishing.
+   - Public portfolio: `/demo` (static demo) or `/{your-username}` after publishing.
 
 ## Project structure
 
@@ -62,7 +62,7 @@
 app/
   (app)/dashboard/     # Repo list, add, generate
   (app)/editor/       # Bio, socials, publish toggle
-  u/[username]/       # Public portfolio
+  [slug]/             # Public portfolio (/{slug})
 api/
   auth/               # NextAuth
   repos/               # GET user repos

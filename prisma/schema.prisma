@@ -62,31 +62,55 @@ model VerificationToken {
 }
 
 model Portfolio {
-  id          String   @id @default(uuid())
-  userId      String   @unique
-  slug        String   @unique
-  theme       String   @default("dark")
-  bio         String?  @db.Text
-  socialsJson String?  @db.Text
-  isPublished Boolean  @default(false)
-  createdAt   DateTime @default(now())
+  id                   String   @id @default(uuid())
+  userId               String   @unique
+  slug                 String   @unique
+  theme                String   @default("dark")
+  bio                  String?  @db.Text
+  socialsJson           String?  @db.Text
+  isPublished          Boolean  @default(false)
+  backgroundStyle      String   @default("minimal")
+  backgroundOptionsJson String?  @db.Text
+  displayName          String?  @db.Text
+  imageUrl             String?  @db.Text
+  createdAt            DateTime @default(now())
 
   user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   repos  PortfolioRepo[]
+  timelineEntries PortfolioTimelineEntry[]
+}
+
+model PortfolioTimelineEntry {
+  id          String   @id @default(uuid())
+  portfolioId String
+  date        String   // YYYY-MM or YYYY for sorting
+  year        Int
+  title       String
+  subtitle    String?  @db.Text
+  kind        String   // job_start, job_end, education_start, graduation, hackathon, certification, career_update, custom
+  sortOrder   Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  portfolio Portfolio @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
 }
 
 model PortfolioRepo {
-  id               String    @id @default(uuid())
-  portfolioId      String
-  repoFullName     String
-  branch           String    @default("main")
-  pinnedOrder      Int       @default(0)
-  customTitle      String?
-  customSummary    String?   @db.Text
-  detectedStackJson String?  @db.Text
-  status           RepoStatus @default(QUEUED)
-  runnable         Boolean?
-  createdAt        DateTime  @default(now())
+  id                 String    @id @default(uuid())
+  portfolioId        String
+  repoFullName       String
+  branch             String    @default("main")
+  pinnedOrder        Int       @default(0)
+  customTitle        String?
+  customSummary      String?   @db.Text
+  projectWebsiteUrl  String?
+  showCommitsGraph   Boolean   @default(true)
+  showLanguagesGraph Boolean   @default(true)
+  showScreenshots    Boolean   @default(true)
+  showDiagram        Boolean   @default(true)
+  detectedStackJson  String?   @db.Text
+  status             RepoStatus @default(QUEUED)
+  runnable           Boolean?
+  createdAt          DateTime  @default(now())
 
   portfolio Portfolio     @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
   artifacts RepoArtifact[]

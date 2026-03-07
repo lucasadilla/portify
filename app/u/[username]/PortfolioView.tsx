@@ -1,16 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import type { ComponentType } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { getTechBadgeClassName } from "@/lib/badgeColors";
 import { Button } from "@/components/ui/button";
 import { EvolutionGraph } from "@/components/EvolutionGraph";
 import { LanguageChart } from "@/components/LanguageChart";
-import { Mail, Globe, Linkedin, Github } from "lucide-react";
+import { Mail, Globe, Linkedin, Github, Twitter, Instagram, Youtube, MessageCircle, Code2, BookOpen, Newspaper, Video, Plus, Loader2, ChevronUp, ChevronDown, Pin } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 import { SignedInNav } from "@/components/SignedInNav";
+import { AnimateInView } from "@/components/AnimateInView";
+import { SOCIAL_LINK_KEYS } from "@/lib/socialLinks";
+import { PortfolioBackground, BACKGROUND_STYLES } from "@/components/portfolio-backgrounds";
 
 type RepoArtifact = { id: string; type: string; url: string };
 
@@ -31,16 +38,20 @@ type Props = {
     slug: string;
     bio: string | null;
     theme: string;
+    backgroundStyle?: string;
+    displayName?: string | null;
+    imageUrl?: string | null;
     socials: Record<string, string>;
     user: { name: string | null; image: string | null; email: string | null };
     repos: Repo[];
   };
   isUnpublished?: boolean;
+  isPublished?: boolean;
   evolutionData?: EvolutionPoint[];
   languageData?: LanguageSlice[];
   commitsTimeRange?: "all" | "year";
   developerTimeline?: {
-    kind: "account" | "repo";
+    kind: "account" | "repo" | "custom";
     id: string;
     date: string;
     year: number;
@@ -51,6 +62,7 @@ type Props = {
     stars?: number;
     hasProjectPage?: boolean;
     stack?: string[];
+    customKind?: string;
   }[];
   githubJoinDate?: string | null;
   githubUsername?: string | null;
@@ -72,6 +84,36 @@ const MOCK_LANGUAGES: LanguageSlice[] = [
   { name: "Other", value: 15 },
 ];
 
+const SOCIAL_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  email: Mail,
+  website: Globe,
+  linkedin: Linkedin,
+  github: Github,
+  twitter: Twitter,
+  instagram: Instagram,
+  youtube: Youtube,
+  discord: MessageCircle,
+  stackoverflow: Code2,
+  devto: BookOpen,
+  medium: Newspaper,
+  twitch: Video,
+};
+
+const CAREER_KIND_OPTIONS: { value: string; label: string }[] = [
+  { value: "job_start", label: "Got a job" },
+  { value: "job_end", label: "Left a job" },
+  { value: "education_start", label: "Started school" },
+  { value: "graduation", label: "Graduated" },
+  { value: "hackathon", label: "Hackathon" },
+  { value: "certification", label: "Certification" },
+  { value: "career_update", label: "Career update" },
+  { value: "custom", label: "Other" },
+];
+
+const CAREER_KIND_LABELS: Record<string, string> = Object.fromEntries(
+  CAREER_KIND_OPTIONS.map((o) => [o.value, o.label])
+);
+
 function formatTimelineDate(date: string, fallbackYear: number): string {
   if (!date) return String(fallbackYear);
   const d = new Date(date);
@@ -89,11 +131,15 @@ interface TimelineCardProps {
   resolveProjectHref: (entry: TimelineEntry) => string | null;
   router: ReturnType<typeof useRouter>;
   githubUsername?: string | null;
+  onDelete?: (id: string) => void;
+  onEdit?: (entry: TimelineEntry) => void;
+  isEditMode?: boolean;
 }
 
 function getTimelineSubtitle(entry: TimelineEntry, githubUsername?: string | null): string | null {
   const raw = typeof entry.subtitle === "string" ? entry.subtitle.trim() : "";
   if (raw.length > 0) return raw;
+  if (entry.kind === "custom") return null;
   if (entry.kind === "repo") {
     if (entry.repoFullName && entry.repoFullName.trim().length > 0) {
       return entry.repoFullName;
@@ -112,10 +158,12 @@ function getTimelineSubtitle(entry: TimelineEntry, githubUsername?: string | nul
   return null;
 }
 
-function TimelineCard({ entry, resolveProjectHref, router, githubUsername }: TimelineCardProps) {
+function TimelineCard({ entry, resolveProjectHref, router, githubUsername, onDelete, onEdit, isEditMode }: TimelineCardProps) {
   const href = resolveProjectHref(entry);
   const isClickable = href !== null;
   const subtitle = getTimelineSubtitle(entry, githubUsername);
+  const isCustom = entry.kind === "custom";
+  const showActions = isCustom && isEditMode && (onDelete || onEdit);
   const handleClick = () => {
     if (!href) return;
     if (entry.kind === "repo" && entry.hasProjectPage) {
@@ -132,21 +180,37 @@ function TimelineCard({ entry, resolveProjectHref, router, githubUsername }: Tim
           ? "w-full max-w-sm shadow-sm border-border/70 cursor-pointer transition-colors hover:bg-muted/60"
           : "w-full max-w-sm shadow-sm border-border/70"
       }
-      onClick={isClickable ? handleClick : undefined}
-      role={isClickable ? "button" : undefined}
-      tabIndex={isClickable ? 0 : -1}
+      onClick={showActions ? undefined : isClickable ? handleClick : undefined}
+      role={showActions ? undefined : isClickable ? "button" : undefined}
+      tabIndex={showActions ? -1 : isClickable ? 0 : -1}
       onKeyDown={
-        isClickable
-          ? (e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleClick();
+        showActions
+          ? undefined
+          : isClickable
+            ? (e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  handleClick();
+                }
               }
-            }
-          : undefined
+            : undefined
       }
     >
       <CardContent className="pt-4 pb-4">
+        {showActions && (
+          <div className="flex gap-1 mb-2 justify-end">
+            {onEdit && (
+              <Button size="sm" variant="secondary" className="h-6 text-xs" onClick={() => onEdit(entry)}>
+                Edit
+              </Button>
+            )}
+            {onDelete && (
+              <Button size="sm" variant="destructive" className="h-6 text-xs" onClick={() => onDelete(entry.id)}>
+                Remove
+              </Button>
+            )}
+          </div>
+        )}
         <div className="mb-2 inline-flex items-center justify-between gap-3">
           <div className="text-xs font-semibold text-foreground">
             {entry.kind === "account" ? "Joined GitHub" : entry.title}
@@ -156,10 +220,15 @@ function TimelineCard({ entry, resolveProjectHref, router, githubUsername }: Tim
           </div>
         </div>
         {subtitle && <p className="text-xs text-muted-foreground mb-1">{subtitle}</p>}
+        {entry.kind === "custom" && entry.customKind && (
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wide">
+            {CAREER_KIND_LABELS[entry.customKind] ?? entry.customKind}
+          </p>
+        )}
         {entry.kind === "repo" && (
           <div className="mt-2 flex flex-wrap gap-2">
             {entry.language && (
-              <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTechBadgeClassName(entry.language)}`}>
                 {entry.language}
               </span>
             )}
@@ -167,13 +236,13 @@ function TimelineCard({ entry, resolveProjectHref, router, githubUsername }: Tim
               entry.stack.slice(0, 3).map((tech) => (
                 <span
                   key={tech}
-                  className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground"
+                  className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTechBadgeClassName(tech)}`}
                 >
                   {tech}
                 </span>
               ))}
             {typeof entry.stars === "number" && entry.stars > 0 && (
-              <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+              <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTechBadgeClassName("Stars")}`}>
                 ★ {entry.stars}
               </span>
             )}
@@ -187,6 +256,7 @@ function TimelineCard({ entry, resolveProjectHref, router, githubUsername }: Tim
 export function PortfolioView({
   portfolio,
   isUnpublished,
+  isPublished: isPublishedProp = true,
   evolutionData = [],
   languageData = [],
   commitsTimeRange = "year",
@@ -197,14 +267,19 @@ export function PortfolioView({
   isOwner,
 }: Props) {
   const router = useRouter();
-  const { user, repos, bio, socials } = portfolio;
+  const { user, repos, bio, socials, slug, backgroundStyle = "minimal", displayName: displayNameOverride, imageUrl: imageUrlOverride } = portfolio;
   const [editMode, setEditMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [bioDraft, setBioDraft] = useState(bio ?? "");
-  const [emailDraft, setEmailDraft] = useState(socials.email ?? "");
-  const [websiteDraft, setWebsiteDraft] = useState(socials.website ?? "");
-  const [linkedinDraft, setLinkedinDraft] = useState(socials.linkedin ?? "");
-  const [githubDraft, setGithubDraft] = useState(socials.github ?? "");
+  const [slugDraft, setSlugDraft] = useState(slug);
+  const [slugError, setSlugError] = useState<string | null>(null);
+  const [socialsDraft, setSocialsDraft] = useState<Record<string, string>>(() => {
+    const initial: Record<string, string> = {};
+    for (const { key } of SOCIAL_LINK_KEYS) {
+      initial[key] = socials[key] ?? "";
+    }
+    return initial;
+  });
   const [repoSummaries, setRepoSummaries] = useState<Record<string, string>>(() => {
     const initial: Record<string, string> = {};
     for (const r of repos) {
@@ -214,17 +289,62 @@ export function PortfolioView({
   });
   const [showCommitsGraph, setShowCommitsGraph] = useState(true);
   const [showLanguagesGraph, setShowLanguagesGraph] = useState(true);
+  const [showDeveloperJourney, setShowDeveloperJourney] = useState(true);
+  const [isPublishedDraft, setIsPublishedDraft] = useState(isPublishedProp);
+  const [newCareerDate, setNewCareerDate] = useState("");
+  const [newCareerTitle, setNewCareerTitle] = useState("");
+  const [newCareerSubtitle, setNewCareerSubtitle] = useState("");
+  const [newCareerKind, setNewCareerKind] = useState("career_update");
+  const [addingCareer, setAddingCareer] = useState(false);
+  const [editingCareerId, setEditingCareerId] = useState<string | null>(null);
+  const [editCareerDraft, setEditCareerDraft] = useState<{ date: string; title: string; subtitle: string; kind: string }>({
+    date: "",
+    title: "",
+    subtitle: "",
+    kind: "custom",
+  });
+  const [showAddProject, setShowAddProject] = useState(false);
+  const [availableRepos, setAvailableRepos] = useState<{ fullName: string; defaultBranch: string; description: string | null }[]>([]);
+  const [addingRepo, setAddingRepo] = useState<string | null>(null);
+  const [reorderingId, setReorderingId] = useState<string | null>(null);
+  const [backgroundStyleDraft, setBackgroundStyleDraft] = useState(backgroundStyle);
+  const [displayNameDraft, setDisplayNameDraft] = useState(displayNameOverride ?? user.name ?? "");
+  const [imageUrlDraft, setImageUrlDraft] = useState(imageUrlOverride ?? user.image ?? "");
+  const [avatarUploading, setAvatarUploading] = useState(false);
+  const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     setBioDraft(bio ?? "");
   }, [bio]);
 
   useEffect(() => {
-    setEmailDraft(socials.email ?? "");
-    setWebsiteDraft(socials.website ?? "");
-    setLinkedinDraft(socials.linkedin ?? "");
-    setGithubDraft(socials.github ?? "");
-  }, [socials.email, socials.website, socials.linkedin, socials.github]);
+    setIsPublishedDraft(isPublishedProp);
+  }, [isPublishedProp]);
+
+  useEffect(() => {
+    setSlugDraft(slug);
+  }, [slug]);
+
+  useEffect(() => {
+    setBackgroundStyleDraft(backgroundStyle);
+  }, [backgroundStyle]);
+  useEffect(() => {
+    setDisplayNameDraft(displayNameOverride ?? user.name ?? "");
+  }, [displayNameOverride, user.name]);
+  useEffect(() => {
+    setImageUrlDraft(imageUrlOverride ?? user.image ?? "");
+  }, [imageUrlOverride, user.image]);
+
+  useEffect(() => {
+    setSocialsDraft((prev) => {
+      const next = { ...prev };
+      for (const { key } of SOCIAL_LINK_KEYS) {
+        next[key] = socials[key] ?? "";
+      }
+      return next;
+    });
+  }, [socials]);
 
   useEffect(() => {
     setRepoSummaries((prev) => {
@@ -247,28 +367,101 @@ export function PortfolioView({
     const repoName = entry.repoFullName.split("/").pop();
     if (!repoName) return null;
     if (entry.hasProjectPage) {
-      return `/u/${portfolio.slug}/${encodeURIComponent(repoName)}`;
+      return `/${portfolio.slug}/${encodeURIComponent(repoName)}`;
     }
     return `https://github.com/${entry.repoFullName}`;
   };
 
+  async function createCareerEntry() {
+    const dateStr = newCareerDate.trim() || `${new Date().getFullYear()}-01`;
+    const titleStr = newCareerTitle.trim();
+    if (!titleStr) return;
+    setAddingCareer(true);
+    try {
+      await fetch("/api/portfolio/timeline-entries", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          date: dateStr,
+          title: titleStr,
+          subtitle: newCareerSubtitle.trim() || null,
+          kind: newCareerKind,
+        }),
+      });
+      router.refresh();
+      setNewCareerDate("");
+      setNewCareerTitle("");
+      setNewCareerSubtitle("");
+      setNewCareerKind("career_update");
+    } finally {
+      setAddingCareer(false);
+    }
+  }
+
+  async function deleteCareerEntry(id: string) {
+    await fetch(`/api/portfolio/timeline-entries/${id}`, { method: "DELETE" });
+    router.refresh();
+    setEditingCareerId(null);
+  }
+
+  async function saveCareerEntry(id: string) {
+    await fetch(`/api/portfolio/timeline-entries/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        date: editCareerDraft.date,
+        title: editCareerDraft.title,
+        subtitle: editCareerDraft.subtitle || null,
+        kind: editCareerDraft.kind,
+      }),
+    });
+    router.refresh();
+    setEditingCareerId(null);
+  }
+
+  function startEditingCareer(entry: (typeof developerTimeline)[number]) {
+    if (entry.kind !== "custom") return;
+    setEditingCareerId(entry.id);
+    setEditCareerDraft({
+      date: entry.date,
+      title: entry.title,
+      subtitle: entry.subtitle ?? "",
+      kind: entry.customKind ?? "custom",
+    });
+  }
+
   async function saveProfileInline() {
+    setSlugError(null);
     setSavingProfile(true);
     try {
-      await fetch("/api/portfolio", {
+      const socialsPayload: Record<string, string> = {};
+      for (const { key } of SOCIAL_LINK_KEYS) {
+        const v = socialsDraft[key]?.trim();
+        if (v) socialsPayload[key] = v;
+      }
+      const res = await fetch("/api/portfolio", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           bio: bioDraft,
-          socialsJson: {
-            email: emailDraft,
-            website: websiteDraft,
-            linkedin: linkedinDraft,
-            github: githubDraft,
-          },
+          socialsJson: socialsPayload,
+          isPublished: isPublishedDraft,
+          slug: slugDraft.trim() || undefined,
+          backgroundStyle: backgroundStyleDraft,
+          displayName: displayNameDraft.trim() || null,
+          imageUrl: imageUrlDraft.trim() || null,
         }),
       });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setSlugError(data.error ?? "Failed to save");
+        return;
+      }
+      const newSlug = data.slug ?? slug;
       router.refresh();
+      if (newSlug !== slug) {
+        router.replace(`/${newSlug}`);
+      }
     } finally {
       setSavingProfile(false);
     }
@@ -289,15 +482,77 @@ export function PortfolioView({
     router.refresh();
   }
 
+  async function openAddProject() {
+    setShowAddProject(true);
+    const res = await fetch("/api/repos");
+    if (res.ok) {
+      const data = await res.json();
+      const existing = new Set(repos.map((r) => r.repoFullName.toLowerCase()));
+      setAvailableRepos(
+        data.filter((r: { fullName: string }) => !existing.has(r.fullName.toLowerCase())).map((r: { fullName: string; defaultBranch: string; description: string | null }) => ({
+          fullName: r.fullName,
+          defaultBranch: r.defaultBranch ?? "main",
+          description: r.description ?? null,
+        }))
+      );
+    }
+  }
+
+  async function reorderRepos(newOrder: Repo[]) {
+    const orderedIds = newOrder.map((r) => r.id);
+    const res = await fetch("/api/portfolio/repos/reorder", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds }),
+    });
+    if (res.ok) router.refresh();
+    setReorderingId(null);
+  }
+
+  async function moveProject(repoId: string, direction: "top" | "up" | "down") {
+    const current = [...repos];
+    const from = current.findIndex((r) => r.id === repoId);
+    if (from < 0) return;
+    if (direction === "top" && from === 0) return;
+    if (direction === "up" && from === 0) return;
+    if (direction === "down" && from === current.length - 1) return;
+    const [item] = current.splice(from, 1);
+    if (direction === "top") current.unshift(item);
+    else if (direction === "up") current.splice(from - 1, 0, item);
+    else current.splice(from + 1, 0, item);
+    setReorderingId(repoId);
+    await reorderRepos(current);
+  }
+
+  async function addProjectFromGitHub(fullName: string, defaultBranch: string) {
+    setAddingRepo(fullName);
+    try {
+      const addRes = await fetch("/api/portfolio/repos", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repoFullName: fullName, branch: defaultBranch }),
+      });
+      const addData = await addRes.json();
+      if (addData.repo?.id) {
+        await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ portfolioRepoId: addData.repo.id }),
+        });
+      }
+      router.refresh();
+      setAvailableRepos((prev) => prev.filter((r) => r.fullName !== fullName));
+    } finally {
+      setAddingRepo(null);
+    }
+  }
+
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen relative">
+      <PortfolioBackground style={backgroundStyle} />
       {isUnpublished && (
         <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-center text-sm text-amber-800 dark:text-amber-200">
-          This portfolio is not public yet.{" "}
-          <Link href="/editor" className="font-medium underline underline-offset-2 hover:no-underline">
-            Publish it from the Editor
-          </Link>{" "}
-          to share the link.
+          This portfolio is not public yet. Turn on <strong>Published</strong> in edit mode and save to share the link.
         </div>
       )}
       <header className="border-b border-border/40">
@@ -326,67 +581,150 @@ export function PortfolioView({
             >
               {editMode ? "Exit edit mode" : "Edit on page"}
             </Button>
-            <Link href="/editor" className="text-xs text-muted-foreground hover:text-foreground underline-offset-2">
-              Open full editor
-            </Link>
-            <Link href="/dashboard" className="text-xs text-muted-foreground hover:text-foreground underline-offset-2">
-              Manage portfolio repos
-            </Link>
           </div>
         )}
         <section className="flex flex-col md:flex-row gap-8 items-start mb-12">
-          {user.image && (
-            <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border flex-shrink-0">
-              <Image src={user.image} alt={user.name ?? ""} fill className="object-cover" />
+          {(user.image || (editMode && isOwner && imageUrlDraft)) && (
+            <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border flex-shrink-0 bg-muted">
+              <Image
+                src={editMode && isOwner && imageUrlDraft ? imageUrlDraft : (user.image ?? "")}
+                alt={user.name ?? ""}
+                fill
+                className="object-cover"
+                unoptimized={editMode && isOwner && imageUrlDraft ? true : undefined}
+                onError={(e) => {
+                  if (editMode && isOwner) (e.target as HTMLImageElement).style.display = "none";
+                }}
+              />
             </div>
           )}
           <div className="flex-1 space-y-3">
-            <h1 className="text-3xl font-bold">{user.name}</h1>
+            <h1 className="text-3xl font-bold">{editMode && isOwner ? displayNameDraft || "Your name" : user.name}</h1>
             {editMode && isOwner ? (
               <div className="space-y-3">
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Display name</Label>
+                  <input
+                    type="text"
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={displayNameDraft}
+                    onChange={(e) => setDisplayNameDraft(e.target.value)}
+                    placeholder="Your name"
+                  />
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Profile picture</Label>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <input
+                      type="url"
+                      className="min-w-0 flex-1 rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={imageUrlDraft}
+                      onChange={(e) => { setImageUrlDraft(e.target.value); setAvatarUploadError(null); }}
+                      placeholder="https://... or upload below"
+                    />
+                    <input
+                      ref={avatarInputRef}
+                      type="file"
+                      accept="image/png,image/jpeg,image/jpg,image/gif,image/webp,image/svg+xml"
+                      className="hidden"
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        setAvatarUploadError(null);
+                        setAvatarUploading(true);
+                        try {
+                          const formData = new FormData();
+                          formData.append("file", file);
+                          const res = await fetch("/api/portfolio/avatar/upload", { method: "POST", body: formData });
+                          const data = await res.json();
+                          if (res.ok && data.url) {
+                            setImageUrlDraft(data.url);
+                          } else {
+                            setAvatarUploadError(data.error ?? "Upload failed");
+                          }
+                        } catch {
+                          setAvatarUploadError("Upload failed");
+                        } finally {
+                          setAvatarUploading(false);
+                          e.target.value = "";
+                        }
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0"
+                      disabled={avatarUploading}
+                      onClick={() => avatarInputRef.current?.click()}
+                    >
+                      {avatarUploading ? <Loader2 className="h-4 w-4 animate-spin" /> : "Upload from computer"}
+                    </Button>
+                  </div>
+                  {avatarUploadError && <p className="mt-1 text-xs text-destructive">{avatarUploadError}</p>}
+                  <p className="mt-0.5 text-xs text-muted-foreground">Paste an image URL or upload a file (PNG, JPEG, GIF, WebP, SVG, max 5 MB).</p>
+                </div>
                 <textarea
                   className="flex min-h-[80px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
                   value={bioDraft}
                   onChange={(e) => setBioDraft(e.target.value)}
                   placeholder="A short bio about you..."
                 />
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Portfolio URL</Label>
+                  <div className="mt-1 flex items-center gap-1 rounded-md border border-input bg-background text-sm">
+                    <span className="px-3 py-1.5 text-muted-foreground shrink-0">/</span>
+                    <input
+                      type="text"
+                      className="min-w-0 flex-1 rounded-r-md border-0 bg-transparent px-0 py-1.5 text-sm focus:ring-0 focus-visible:ring-0"
+                      value={slugDraft}
+                      onChange={(e) => {
+                        setSlugDraft(e.target.value.toLowerCase().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, ""));
+                        setSlugError(null);
+                      }}
+                      placeholder="yourname"
+                      disabled={isDemo}
+                    />
+                  </div>
+                  {slugError && <p className="mt-1 text-xs text-destructive">{slugError}</p>}
+                  <p className="mt-0.5 text-xs text-muted-foreground">
+                    Your portfolio will be at <strong>/{slugDraft || "yourname"}</strong>. Letters, numbers, and hyphens only.
+                  </p>
+                </div>
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
-                  <label className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">Email</span>
-                    <input
-                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      value={emailDraft}
-                      onChange={(e) => setEmailDraft(e.target.value)}
-                      placeholder="you@example.com"
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">Website</span>
-                    <input
-                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      value={websiteDraft}
-                      onChange={(e) => setWebsiteDraft(e.target.value)}
-                      placeholder="https://..."
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">LinkedIn</span>
-                    <input
-                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      value={linkedinDraft}
-                      onChange={(e) => setLinkedinDraft(e.target.value)}
-                      placeholder="https://linkedin.com/in/..."
-                    />
-                  </label>
-                  <label className="space-y-1">
-                    <span className="text-xs font-medium text-muted-foreground">GitHub</span>
-                    <input
-                      className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
-                      value={githubDraft}
-                      onChange={(e) => setGithubDraft(e.target.value)}
-                      placeholder="https://github.com/your-handle"
-                    />
-                  </label>
+                  {SOCIAL_LINK_KEYS.map(({ key, label, placeholder }) => (
+                    <label key={key} className="space-y-1">
+                      <span className="text-xs font-medium text-muted-foreground">{label}</span>
+                      <input
+                        className="w-full rounded-md border border-input bg-background px-3 py-1.5 text-sm"
+                        value={socialsDraft[key] ?? ""}
+                        onChange={(e) => setSocialsDraft((prev) => ({ ...prev, [key]: e.target.value }))}
+                        placeholder={placeholder}
+                      />
+                    </label>
+                  ))}
+                </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Background style</Label>
+                  <select
+                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                    value={backgroundStyleDraft}
+                    onChange={(e) => setBackgroundStyleDraft(e.target.value)}
+                  >
+                    {BACKGROUND_STYLES.map((s) => (
+                      <option key={s.value} value={s.value}>
+                        {s.label} — {s.description}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                <div className="flex items-center justify-between gap-2">
+                  <Label htmlFor="publish-inline" className="text-sm">Published</Label>
+                  <Switch
+                    id="publish-inline"
+                    checked={isPublishedDraft}
+                    onCheckedChange={setIsPublishedDraft}
+                  />
                 </div>
                 <Button size="sm" onClick={saveProfileInline} disabled={savingProfile}>
                   {savingProfile ? "Saving…" : "Save profile"}
@@ -396,31 +734,23 @@ export function PortfolioView({
               <>
                 {bio && <p className="text-muted-foreground mb-1">{bio}</p>}
                 <div className="flex flex-wrap gap-4 text-sm mt-2">
-                  {socials.email && (
-                    <a href={`mailto:${socials.email}`} className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
-                      <Mail className="h-4 w-4" /> {socials.email}
-                    </a>
-                  )}
-                  {socials.website && (
-                    <a href={socials.website} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
-                      <Globe className="h-4 w-4" /> Website
-                    </a>
-                  )}
-                  {socials.linkedin && (
-                    <a href={socials.linkedin} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
-                      <Linkedin className="h-4 w-4" /> LinkedIn
-                    </a>
-                  )}
-                  {socials.github && (
-                    <a
-                      href={socials.github}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
-                    >
-                      <Github className="h-4 w-4" /> GitHub
-                    </a>
-                  )}
+                  {SOCIAL_LINK_KEYS.map(({ key, label }) => {
+                    const value = socials[key]?.trim();
+                    if (!value) return null;
+                    const Icon = SOCIAL_ICONS[key];
+                    const href = key === "email" ? `mailto:${value}` : value;
+                    return (
+                      <a
+                        key={key}
+                        href={href}
+                        target={key === "email" ? undefined : "_blank"}
+                        rel={key === "email" ? undefined : "noopener noreferrer"}
+                        className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                      >
+                        {Icon && <Icon className="h-4 w-4" />} {key === "email" ? value : label}
+                      </a>
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -441,8 +771,9 @@ export function PortfolioView({
                   {editMode && isOwner && (
                     <button
                       type="button"
-                      className="absolute right-2 top-2 rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+                      className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={() => setShowCommitsGraph(false)}
+                      aria-label="Remove contributions graph"
                     >
                       ×
                     </button>
@@ -457,8 +788,9 @@ export function PortfolioView({
                   {editMode && isOwner && (
                     <button
                       type="button"
-                      className="absolute right-2 top-2 rounded-full border border-border bg-background/80 px-2 py-0.5 text-[10px] text-muted-foreground hover:bg-muted"
+                      className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
                       onClick={() => setShowLanguagesGraph(false)}
+                      aria-label="Remove languages chart"
                     >
                       ×
                     </button>
@@ -489,23 +821,174 @@ export function PortfolioView({
                     + Add languages chart
                   </button>
                 )}
+                {!showDeveloperJourney && (
+                  <button
+                    type="button"
+                    className="rounded-full border border-border bg-muted/40 px-2.5 py-0.5 hover:bg-muted hover:text-foreground"
+                    onClick={() => setShowDeveloperJourney(true)}
+                  >
+                    + Add developer journey
+                  </button>
+                )}
               </div>
             )}
           </section>
         )}
 
-        {developerTimeline.length > 0 && (
+        {showDeveloperJourney && (developerTimeline.length > 0 || (editMode && isOwner)) && (
           <section className="mb-12">
-            <h2 className="text-xl font-semibold mb-1">Developer journey</h2>
+            <div className="flex items-start justify-between gap-4 mb-1">
+              <h2 className="text-xl font-semibold">Developer journey</h2>
+              {editMode && isOwner && (
+                <button
+                  type="button"
+                  className="flex h-9 w-9 flex-shrink-0 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                  onClick={() => setShowDeveloperJourney(false)}
+                  aria-label="Remove developer journey"
+                >
+                  ×
+                </button>
+              )}
+            </div>
             <p className="text-sm text-muted-foreground mb-6">
-              {githubJoinDate && githubUsername
-                ? `From when ${githubUsername} joined GitHub to today.`
-                : "A timeline of your GitHub activity over the years."}
+              {developerTimeline.length > 0
+                ? githubJoinDate && githubUsername
+                  ? `From when ${githubUsername} joined GitHub to today.`
+                  : "A timeline of your GitHub activity over the years."
+                : "Your developer journey will appear here when you have repos connected."}
             </p>
 
+            {editMode && isOwner && (
+              <Card className="mb-8 border-dashed">
+                <CardContent className="pt-6">
+                  <h3 className="text-sm font-medium mb-3">Add career event</h3>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    Add jobs, education, hackathons, or other milestones not on GitHub.
+                  </p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Date (year or YYYY-MM)</Label>
+                      <input
+                        type="text"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={newCareerDate}
+                        onChange={(e) => setNewCareerDate(e.target.value)}
+                        placeholder="2024 or 2024-06"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Type</Label>
+                      <select
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={newCareerKind}
+                        onChange={(e) => setNewCareerKind(e.target.value)}
+                      >
+                        {CAREER_KIND_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label className="text-xs">Title</Label>
+                      <input
+                        type="text"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={newCareerTitle}
+                        onChange={(e) => setNewCareerTitle(e.target.value)}
+                        placeholder="e.g. Started at Acme Inc."
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label className="text-xs">Description (optional)</Label>
+                      <input
+                        type="text"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={newCareerSubtitle}
+                        onChange={(e) => setNewCareerSubtitle(e.target.value)}
+                        placeholder="e.g. Full-stack developer"
+                      />
+                    </div>
+                    <div>
+                      <Button size="sm" onClick={createCareerEntry} disabled={addingCareer || !newCareerTitle.trim()}>
+                        {addingCareer ? "Adding…" : "Add event"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {editingCareerId && (
+              <Card className="mb-8 border-primary/50">
+                <CardContent className="pt-6">
+                  <h3 className="text-sm font-medium mb-3">Edit career event</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <div>
+                      <Label className="text-xs">Date</Label>
+                      <input
+                        type="text"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editCareerDraft.date}
+                        onChange={(e) => setEditCareerDraft((p) => ({ ...p, date: e.target.value }))}
+                        placeholder="2024-06"
+                      />
+                    </div>
+                    <div>
+                      <Label className="text-xs">Type</Label>
+                      <select
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editCareerDraft.kind}
+                        onChange={(e) => setEditCareerDraft((p) => ({ ...p, kind: e.target.value }))}
+                      >
+                        {CAREER_KIND_OPTIONS.map((o) => (
+                          <option key={o.value} value={o.value}>
+                            {o.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label className="text-xs">Title</Label>
+                      <input
+                        type="text"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editCareerDraft.title}
+                        onChange={(e) => setEditCareerDraft((p) => ({ ...p, title: e.target.value }))}
+                      />
+                    </div>
+                    <div className="md:col-span-2">
+                      <Label className="text-xs">Description</Label>
+                      <input
+                        type="text"
+                        className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                        value={editCareerDraft.subtitle}
+                        onChange={(e) => setEditCareerDraft((p) => ({ ...p, subtitle: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex gap-2">
+                      <Button size="sm" onClick={() => editingCareerId && saveCareerEntry(editingCareerId)}>
+                        Save
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={() => setEditingCareerId(null)}>
+                        Cancel
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            )}
+
+            {developerTimeline.length === 0 ? (
+              <p className="text-sm text-muted-foreground rounded-lg border border-dashed border-border bg-muted/20 px-4 py-6 text-center">
+                Connect repos from the dashboard to build your timeline.
+              </p>
+            ) : (
+              <>
             {/* Mobile: simple left-side timeline */}
             <div className="space-y-4 border-l-2 border-primary/50 dark:border-primary pl-4 md:hidden">
-              {developerTimeline.map((entry) => {
+              {developerTimeline.map((entry, index) => {
                 const href = resolveProjectHref(entry);
                 const isClickable = href !== null;
                 const handleClick = () => {
@@ -517,7 +1000,8 @@ export function PortfolioView({
                   }
                 };
                 return (
-                  <div key={entry.id} className="relative pl-4">
+                  <AnimateInView key={entry.id} animation="fadeUp" delay={index * 40}>
+                  <div className="relative pl-4">
                     <span className="absolute -left-[9px] mt-1 h-2.5 w-2.5 rounded-full bg-primary" />
                     <div
                       className={
@@ -550,10 +1034,25 @@ export function PortfolioView({
                           {getTimelineSubtitle(entry, githubUsername)}
                         </p>
                       )}
+                      {entry.kind === "custom" && entry.customKind && (
+                        <p className="text-[10px] text-muted-foreground uppercase tracking-wide mt-0.5">
+                          {CAREER_KIND_LABELS[entry.customKind] ?? entry.customKind}
+                        </p>
+                      )}
+                      {entry.kind === "custom" && editMode && isOwner && (
+                        <div className="flex gap-1 mt-2">
+                          <Button size="sm" variant="secondary" className="h-6 text-xs" onClick={() => startEditingCareer(entry)}>
+                            Edit
+                          </Button>
+                          <Button size="sm" variant="destructive" className="h-6 text-xs" onClick={() => deleteCareerEntry(entry.id)}>
+                            Remove
+                          </Button>
+                        </div>
+                      )}
                       {entry.kind === "repo" && (
                         <div className="mt-2 flex flex-wrap gap-2">
                           {entry.language && (
-                            <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTechBadgeClassName(entry.language)}`}>
                               {entry.language}
                             </span>
                           )}
@@ -561,13 +1060,13 @@ export function PortfolioView({
                             entry.stack.slice(0, 3).map((tech) => (
                               <span
                                 key={tech}
-                                className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground"
+                                className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTechBadgeClassName(tech)}`}
                               >
                                 {tech}
                               </span>
                             ))}
                           {typeof entry.stars === "number" && entry.stars > 0 && (
-                            <span className="rounded-full border border-border/60 bg-muted/40 px-2 py-0.5 text-[10px] text-muted-foreground">
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTechBadgeClassName("Stars")}`}>
                               ★ {entry.stars}
                             </span>
                           )}
@@ -575,6 +1074,7 @@ export function PortfolioView({
                       )}
                     </div>
                   </div>
+                  </AnimateInView>
                 );
               })}
             </div>
@@ -586,7 +1086,8 @@ export function PortfolioView({
                 {developerTimeline.map((entry, index) => {
                   const isLeft = index % 2 === 0;
                   return (
-                    <div key={entry.id} className="relative grid grid-cols-2 gap-10">
+                    <AnimateInView key={entry.id} animation="fadeUp" delay={index * 50}>
+                    <div className="relative grid grid-cols-2 gap-10">
                       {/* Left side card */}
                       <div
                         className={isLeft ? "col-span-1 flex justify-end" : "col-span-1 flex justify-end opacity-0 md:pointer-events-none"}
@@ -598,6 +1099,9 @@ export function PortfolioView({
                             resolveProjectHref={resolveProjectHref}
                             router={router}
                             githubUsername={githubUsername}
+                            isEditMode={editMode && !!isOwner}
+                            onDelete={editMode && isOwner ? deleteCareerEntry : undefined}
+                            onEdit={editMode && isOwner ? startEditingCareer : undefined}
                           />
                         )}
                       </div>
@@ -616,26 +1120,89 @@ export function PortfolioView({
                             resolveProjectHref={resolveProjectHref}
                             router={router}
                             githubUsername={githubUsername}
+                            isEditMode={editMode && !!isOwner}
+                            onDelete={editMode && isOwner ? deleteCareerEntry : undefined}
+                            onEdit={editMode && isOwner ? startEditingCareer : undefined}
                           />
                         )}
                       </div>
                     </div>
+                    </AnimateInView>
                   );
                 })}
               </div>
             </div>
+              </>
+            )}
           </section>
         )}
 
         <section className="space-y-8">
-          <h2 className="text-2xl font-semibold">Projects</h2>
-          {repos.map((repo) => {
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-2xl font-semibold">Projects</h2>
+              {editMode && isOwner && repos.length > 0 && (
+                <p className="text-sm text-muted-foreground mt-0.5">
+                  Pin your top 4: use the pin and arrow buttons to reorder. First 4 appear at the top.
+                </p>
+              )}
+            </div>
+            {editMode && isOwner && (
+              <div className="flex flex-col gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="gap-1"
+                  onClick={() => (showAddProject ? setShowAddProject(false) : openAddProject())}
+                >
+                  <Plus className="h-4 w-4" />
+                  Add project
+                </Button>
+                {showAddProject && (
+                  <div className="rounded-md border border-border bg-card p-2 shadow-lg max-h-64 overflow-auto min-w-[280px]">
+                    {availableRepos.length === 0 ? (
+                      <p className="text-sm text-muted-foreground px-2 py-4">
+                        All your GitHub repos are already in your portfolio.
+                      </p>
+                    ) : (
+                      <ul className="space-y-1">
+                        {availableRepos.map((r) => (
+                          <li key={r.fullName} className="flex items-center justify-between gap-2 rounded px-2 py-1.5 hover:bg-muted/60">
+                            <div className="min-w-0 flex-1">
+                              <p className="text-sm font-medium truncate">{r.fullName}</p>
+                              {r.description && (
+                                <p className="text-xs text-muted-foreground truncate">{r.description}</p>
+                              )}
+                            </div>
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="secondary"
+                              className="shrink-0 h-7"
+                              disabled={addingRepo === r.fullName}
+                              onClick={() => addProjectFromGitHub(r.fullName, r.defaultBranch)}
+                            >
+                              {addingRepo === r.fullName ? <Loader2 className="h-3 w-3 animate-spin" /> : "Add"}
+                            </Button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {repos.map((repo, index) => {
             const title = repo.customTitle ?? repo.repoFullName.split("/")[1];
             const repoName = repo.repoFullName.split("/").pop() ?? title;
-            const projectHref = `/u/${portfolio.slug}/${encodeURIComponent(repoName)}`;
+            const projectHref = `/${portfolio.slug}/${encodeURIComponent(repoName)}`;
             const summary = repo.customSummary ?? "No description.";
             const stack = repo.detectedStackJson ? (JSON.parse(repo.detectedStackJson) as string[]) : [];
             const summaryDraft = repoSummaries[repo.id] ?? summary;
+            const isPinnedTop4 = index < 4;
+            const isReordering = reorderingId === repo.id;
             return (
               <Card
                 key={repo.id}
@@ -655,8 +1222,15 @@ export function PortfolioView({
                 tabIndex={editMode ? -1 : 0}
               >
                 <CardHeader className="flex flex-row items-start justify-between gap-4">
-                  <div>
-                    <h3 className="text-xl font-semibold hover:underline">{title}</h3>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-xl font-semibold hover:underline">{title}</h3>
+                      {editMode && isOwner && isPinnedTop4 && (
+                        <span className="rounded-full bg-primary/15 px-2 py-0.5 text-xs font-medium text-primary">
+                          Pinned #{index + 1}
+                        </span>
+                      )}
+                    </div>
                     <a
                       href={`https://github.com/${repo.repoFullName}`}
                       target="_blank"
@@ -667,6 +1241,43 @@ export function PortfolioView({
                       <Github className="h-4 w-4" /> {repo.repoFullName}
                     </a>
                   </div>
+                  {editMode && isOwner && (
+                    <div className="flex shrink-0 items-center gap-0.5" onClick={(e) => e.stopPropagation()}>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        title="Pin to top"
+                        disabled={index === 0 || isReordering}
+                        onClick={() => moveProject(repo.id, "top")}
+                      >
+                        <Pin className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        title="Move up"
+                        disabled={index === 0 || isReordering}
+                        onClick={() => moveProject(repo.id, "up")}
+                      >
+                        <ChevronUp className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-8 w-8 p-0"
+                        title="Move down"
+                        disabled={index === repos.length - 1 || isReordering}
+                        onClick={() => moveProject(repo.id, "down")}
+                      >
+                        <ChevronDown className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  )}
                 </CardHeader>
                 <CardContent className="space-y-4">
                   {editMode && isOwner ? (
@@ -714,7 +1325,7 @@ export function PortfolioView({
                   {stack.length > 0 && (
                     <div className="flex flex-wrap gap-1">
                       {stack.slice(0, 5).map((s) => (
-                        <Badge key={s} variant="outline">
+                        <Badge key={s} variant="outline" className={getTechBadgeClassName(s)}>
                           {s}
                         </Badge>
                       ))}

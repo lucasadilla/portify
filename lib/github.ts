@@ -1,24 +1,50 @@
 const GITHUB_API = "https://api.github.com";
 
+const mapRawToRepo = (r: RawRepo): GitHubRepo => ({
+  id: r.id,
+  fullName: r.full_name,
+  name: r.name,
+  description: r.description,
+  defaultBranch: r.default_branch ?? "main",
+  private: r.private,
+  htmlUrl: r.html_url,
+  language: r.language,
+  stargazersCount: r.stargazers_count,
+  pushedAt: r.pushed_at,
+  createdAt: r.created_at,
+});
+
 export async function getGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
   const res = await fetch(`${GITHUB_API}/user/repos?per_page=100&sort=updated`, {
     headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" },
   });
   if (!res.ok) throw new Error("Failed to fetch repos");
   const data = await res.json();
-  return data.map((r: RawRepo) => ({
-    id: r.id,
-    fullName: r.full_name,
-    name: r.name,
-    description: r.description,
-    defaultBranch: r.default_branch ?? "main",
-    private: r.private,
-    htmlUrl: r.html_url,
-    language: r.language,
-    stargazersCount: r.stargazers_count,
-    pushedAt: r.pushed_at,
-    createdAt: r.created_at,
-  }));
+  return data.map((r: RawRepo) => mapRawToRepo(r));
+}
+
+/** Fetch all public repos across all pages (for portfolio sync). */
+export async function getAllGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
+  const all: GitHubRepo[] = [];
+  let page = 1;
+  const perPage = 100;
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/vnd.github.v3+json",
+  };
+  while (true) {
+    const res = await fetch(
+      `${GITHUB_API}/user/repos?per_page=${perPage}&sort=updated&page=${page}`,
+      { headers }
+    );
+    if (!res.ok) throw new Error("Failed to fetch repos");
+    const data = (await res.json()) as RawRepo[];
+    const mapped = data.map((r) => mapRawToRepo(r));
+    all.push(...mapped.filter((r) => !r.private));
+    if (mapped.length < perPage) break;
+    page += 1;
+  }
+  return all;
 }
 
 export async function getGitHubUserProfile(
