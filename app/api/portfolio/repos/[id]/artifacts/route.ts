@@ -23,7 +23,7 @@ export async function POST(
   const { type, url, metadata } = body as {
     type: "screenshot" | "diagram";
     url?: string;
-    metadata?: { caption?: string; description?: string };
+    metadata?: { caption?: string; description?: string; diagramKind?: string };
   };
 
   if (type !== "screenshot" && type !== "diagram") {
@@ -36,11 +36,18 @@ export async function POST(
   if (!urlStr) {
     return NextResponse.json({ error: "url is required" }, { status: 400 });
   }
-  if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://")) {
-    return NextResponse.json({ error: "url must be http or https" }, { status: 400 });
+  if (!urlStr.startsWith("http://") && !urlStr.startsWith("https://") && !urlStr.startsWith("data:")) {
+    return NextResponse.json({ error: "url must be http, https, or data URL" }, { status: 400 });
   }
 
   const metadataStr = metadata ? JSON.stringify(metadata) : null;
+
+  const maxOrder = await prisma.repoArtifact
+    .aggregate({
+      where: { portfolioRepoId: repoId, type },
+      _max: { sortOrder: true },
+    })
+    .then((r) => (r._max.sortOrder ?? -1) + 1);
 
   const artifact = await prisma.repoArtifact.create({
     data: {
@@ -48,6 +55,7 @@ export async function POST(
       type,
       url: urlStr,
       metadata: metadataStr,
+      sortOrder: maxOrder,
     },
   });
   return NextResponse.json(artifact);

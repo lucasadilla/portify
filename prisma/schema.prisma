@@ -73,6 +73,9 @@ model Portfolio {
   backgroundOptionsJson String?  @db.Text
   displayName          String?  @db.Text
   imageUrl             String?  @db.Text
+  sectionOrderJson     String?  @db.Text
+  contributionsChartOrderJson String?  @db.Text
+  colorPalette         String?  @db.Text
   createdAt            DateTime @default(now())
 
   user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -125,6 +128,7 @@ model RepoArtifact {
   type            ArtifactType
   url             String       @db.Text
   metadata        String?     @db.Text
+  sortOrder       Int          @default(0)
   createdAt       DateTime    @default(now())
 
   portfolioRepo PortfolioRepo @relation(fields: [portfolioRepoId], references: [id], onDelete: Cascade)

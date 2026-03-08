@@ -11,13 +11,14 @@ import { getTechBadgeClassName } from "@/lib/badgeColors";
 import { Button } from "@/components/ui/button";
 import { EvolutionGraph } from "@/components/EvolutionGraph";
 import { LanguageChart } from "@/components/LanguageChart";
-import { Mail, Globe, Linkedin, Github, Twitter, Instagram, Youtube, MessageCircle, Code2, BookOpen, Newspaper, Video, Plus, Loader2, ChevronUp, ChevronDown, Pin } from "lucide-react";
+import { Mail, Globe, Linkedin, Github, Twitter, Instagram, Youtube, MessageCircle, Code2, BookOpen, Newspaper, Video, Plus, Loader2, ChevronUp, ChevronDown, Pin, GripVertical } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { SignedInNav } from "@/components/SignedInNav";
 import { AnimateInView } from "@/components/AnimateInView";
 import { SOCIAL_LINK_KEYS } from "@/lib/socialLinks";
 import { PortfolioBackground, BACKGROUND_STYLES } from "@/components/portfolio-backgrounds";
+import { COLOR_PALETTES, getPaletteStyle, getPaletteIds } from "@/lib/colorPalettes";
 
 type RepoArtifact = { id: string; type: string; url: string };
 
@@ -33,6 +34,23 @@ type Repo = {
 type EvolutionPoint = { month: string; commits: number };
 type LanguageSlice = { name: string; value: number };
 
+const DEFAULT_SECTION_ORDER = ["profile", "contributions", "developer_journey", "projects"] as const;
+const SECTION_LABELS: Record<string, string> = {
+  profile: "Profile (name, bio, photo)",
+  contributions: "Contributions & languages",
+  developer_journey: "Developer journey",
+  projects: "Projects",
+};
+
+const DEFAULT_CHART_ORDER = ["evolution", "languages"] as const;
+function normalizeChartOrder(order: string[] | undefined): string[] {
+  const valid = new Set<string>(DEFAULT_CHART_ORDER);
+  if (!order?.length) return [...DEFAULT_CHART_ORDER];
+  const result = order.filter((id) => valid.has(id));
+  for (const id of DEFAULT_CHART_ORDER) if (!result.includes(id)) result.push(id);
+  return result;
+}
+
 type Props = {
   portfolio: {
     slug: string;
@@ -41,6 +59,9 @@ type Props = {
     backgroundStyle?: string;
     displayName?: string | null;
     imageUrl?: string | null;
+    sectionOrder?: string[];
+    contributionsChartOrder?: string[];
+    colorPalette?: string | null;
     socials: Record<string, string>;
     user: { name: string | null; image: string | null; email: string | null };
     repos: Repo[];
@@ -267,7 +288,15 @@ export function PortfolioView({
   isOwner,
 }: Props) {
   const router = useRouter();
-  const { user, repos, bio, socials, slug, backgroundStyle = "minimal", displayName: displayNameOverride, imageUrl: imageUrlOverride } = portfolio;
+  const { user, repos, bio, socials, slug, backgroundStyle = "minimal", displayName: displayNameOverride, imageUrl: imageUrlOverride, sectionOrder: sectionOrderProp, contributionsChartOrder: contributionsChartOrderProp, colorPalette: colorPaletteProp } = portfolio;
+
+  function normalizeSectionOrder(order: string[] | undefined): string[] {
+    const valid = new Set<string>(DEFAULT_SECTION_ORDER);
+    if (!order?.length) return [...DEFAULT_SECTION_ORDER];
+    const result = order.filter((id) => valid.has(id));
+    for (const id of DEFAULT_SECTION_ORDER) if (!result.includes(id)) result.push(id);
+    return result;
+  }
   const [editMode, setEditMode] = useState(false);
   const [savingProfile, setSavingProfile] = useState(false);
   const [bioDraft, setBioDraft] = useState(bio ?? "");
@@ -313,6 +342,16 @@ export function PortfolioView({
   const [avatarUploading, setAvatarUploading] = useState(false);
   const [avatarUploadError, setAvatarUploadError] = useState<string | null>(null);
   const avatarInputRef = useRef<HTMLInputElement>(null);
+  const [sectionOrderDraft, setSectionOrderDraft] = useState<string[]>(() => normalizeSectionOrder(sectionOrderProp));
+  const [draggedSectionIndex, setDraggedSectionIndex] = useState<number | null>(null);
+  const [contributionsChartOrderDraft, setContributionsChartOrderDraft] = useState<string[]>(() => normalizeChartOrder(contributionsChartOrderProp));
+  const [draggedChartId, setDraggedChartId] = useState<string | null>(null);
+  const [draggedProjectId, setDraggedProjectId] = useState<string | null>(null);
+  const [colorPaletteDraft, setColorPaletteDraft] = useState<string>(colorPaletteProp ?? "default");
+  const effectiveOrder = editMode && isOwner ? sectionOrderDraft : normalizeSectionOrder(sectionOrderProp);
+  const effectiveChartOrder = editMode && isOwner ? contributionsChartOrderDraft : normalizeChartOrder(contributionsChartOrderProp);
+  const effectiveColorPalette = editMode && isOwner ? colorPaletteDraft : (colorPaletteProp ?? "default");
+  const paletteStyle = getPaletteStyle(effectiveColorPalette);
 
   useEffect(() => {
     setBioDraft(bio ?? "");
@@ -335,6 +374,15 @@ export function PortfolioView({
   useEffect(() => {
     setImageUrlDraft(imageUrlOverride ?? user.image ?? "");
   }, [imageUrlOverride, user.image]);
+  useEffect(() => {
+    setSectionOrderDraft(normalizeSectionOrder(sectionOrderProp));
+  }, [sectionOrderProp]);
+  useEffect(() => {
+    setContributionsChartOrderDraft(normalizeChartOrder(contributionsChartOrderProp));
+  }, [contributionsChartOrderProp]);
+  useEffect(() => {
+    setColorPaletteDraft(colorPaletteProp ?? "default");
+  }, [colorPaletteProp]);
 
   useEffect(() => {
     setSocialsDraft((prev) => {
@@ -450,6 +498,9 @@ export function PortfolioView({
           backgroundStyle: backgroundStyleDraft,
           displayName: displayNameDraft.trim() || null,
           imageUrl: imageUrlDraft.trim() || null,
+          sectionOrder: sectionOrderDraft,
+          contributionsChartOrder: contributionsChartOrderDraft,
+          colorPalette: colorPaletteDraft === "default" ? null : colorPaletteDraft,
         }),
       });
       const data = await res.json().catch(() => ({}));
@@ -509,6 +560,17 @@ export function PortfolioView({
     setReorderingId(null);
   }
 
+  function moveProjectToIndex(draggedRepoId: string, dropIndex: number) {
+    const fromIdx = repos.findIndex((r) => r.id === draggedRepoId);
+    if (fromIdx < 0 || fromIdx === dropIndex) return;
+    const next = [...repos];
+    const [removed] = next.splice(fromIdx, 1);
+    next.splice(dropIndex, 0, removed);
+    setReorderingId(draggedRepoId);
+    reorderRepos(next);
+    setDraggedProjectId(null);
+  }
+
   async function moveProject(repoId: string, direction: "top" | "up" | "down") {
     const current = [...repos];
     const from = current.findIndex((r) => r.id === repoId);
@@ -548,7 +610,7 @@ export function PortfolioView({
   }
 
   return (
-    <div className="min-h-screen relative">
+    <div className="min-h-screen relative" style={paletteStyle}>
       <PortfolioBackground style={backgroundStyle} />
       {isUnpublished && (
         <div className="bg-amber-500/15 border-b border-amber-500/30 px-4 py-2 text-center text-sm text-amber-800 dark:text-amber-200">
@@ -583,7 +645,41 @@ export function PortfolioView({
             </Button>
           </div>
         )}
-        <section className="flex flex-col md:flex-row gap-8 items-start mb-12">
+        {editMode && isOwner && (
+          <div className="mb-6 rounded-lg border border-dashed border-border bg-muted/30 p-3">
+            <p className="text-xs font-medium text-muted-foreground mb-2">Section order (drag to reorder)</p>
+            <ul className="space-y-1">
+              {sectionOrderDraft.map((sectionId, index) => (
+                <li
+                  key={sectionId}
+                  draggable
+                  onDragStart={() => setDraggedSectionIndex(index)}
+                  onDragOver={(e) => e.preventDefault()}
+                  onDrop={() => {
+                    if (draggedSectionIndex === null || draggedSectionIndex === index) return;
+                    setSectionOrderDraft((prev) => {
+                      const next = [...prev];
+                      const [removed] = next.splice(draggedSectionIndex, 1);
+                      next.splice(index, 0, removed);
+                      return next;
+                    });
+                    setDraggedSectionIndex(null);
+                  }}
+                  onDragEnd={() => setDraggedSectionIndex(null)}
+                  className={`flex items-center gap-2 rounded-md border border-border bg-background px-2 py-1.5 text-sm cursor-grab active:cursor-grabbing ${draggedSectionIndex === index ? "opacity-50" : ""}`}
+                >
+                  <GripVertical className="h-4 w-4 text-muted-foreground shrink-0" />
+                  <span>{SECTION_LABELS[sectionId] ?? sectionId}</span>
+                </li>
+              ))}
+            </ul>
+            <p className="text-xs text-muted-foreground mt-1.5">Save profile to apply order.</p>
+          </div>
+        )}
+        {effectiveOrder.map((sectionId) => {
+          if (sectionId === "profile")
+            return (
+        <section key="profile" className="flex flex-col md:flex-row gap-8 items-start mb-12">
           {(user.image || (editMode && isOwner && imageUrlDraft)) && (
             <div className="relative h-24 w-24 rounded-full overflow-hidden border-2 border-border flex-shrink-0 bg-muted">
               <Image
@@ -718,6 +814,30 @@ export function PortfolioView({
                     ))}
                   </select>
                 </div>
+                <div>
+                  <Label className="text-xs font-medium text-muted-foreground">Color palette</Label>
+                  <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                    {getPaletteIds().map((id) => {
+                      const p = COLOR_PALETTES[id];
+                      const selected = colorPaletteDraft === id;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => setColorPaletteDraft(id)}
+                          className={`flex items-center gap-2 rounded-lg border-2 px-2 py-1.5 text-left text-sm transition-colors ${selected ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted/70"}`}
+                        >
+                          <span
+                            className="h-6 w-6 shrink-0 rounded-full border border-border"
+                            style={{ backgroundColor: p.swatch }}
+                            aria-hidden
+                          />
+                          <span className="truncate">{p.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
                 <div className="flex items-center justify-between gap-2">
                   <Label htmlFor="publish-inline" className="text-sm">Published</Label>
                   <Switch
@@ -756,50 +876,86 @@ export function PortfolioView({
             )}
           </div>
         </section>
-
-        {(showCommitsGraph || showLanguagesGraph) && (
-          <section className="mb-12">
+            );
+          if (sectionId === "contributions")
+            return (showCommitsGraph || showLanguagesGraph) ? (
+          <section key="contributions" className="mb-12">
             <h2 className="text-xl font-semibold mb-1">Contributions & languages</h2>
             <p className="text-sm text-muted-foreground mb-4">
               {commitsTimeRange === "all"
                 ? "All-time contributions and language breakdown across your GitHub"
                 : "Contributions (last 12 months) and language breakdown across your GitHub repos"}
+              {editMode && isOwner && (showCommitsGraph || showLanguagesGraph) && (
+                <span className="block mt-1 text-xs">Drag cards to swap their positions.</span>
+              )}
             </p>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {showCommitsGraph && (
-                <Card className="relative">
-                  {editMode && isOwner && (
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                      onClick={() => setShowCommitsGraph(false)}
-                      aria-label="Remove contributions graph"
+              {effectiveChartOrder
+                .filter((id) => (id === "evolution" && showCommitsGraph) || (id === "languages" && showLanguagesGraph))
+                .map((chartId) => {
+                  const isEvolution = chartId === "evolution";
+                  const CardWrapper = (
+                    <Card
+                      key={chartId}
+                      className={`relative ${editMode && isOwner ? "cursor-grab active:cursor-grabbing" : ""} ${draggedChartId === chartId ? "opacity-50" : ""}`}
+                      draggable={editMode && isOwner}
+                      onDragStart={() => editMode && isOwner && setDraggedChartId(chartId)}
+                      onDragOver={(e) => { e.preventDefault(); if (editMode && isOwner) e.currentTarget.classList.add("ring-2", "ring-primary/50"); }}
+                      onDragLeave={(e) => { e.currentTarget.classList.remove("ring-2", "ring-primary/50"); }}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("ring-2", "ring-primary/50");
+                        if (!editMode || !isOwner || !draggedChartId || draggedChartId === chartId) return;
+                        setContributionsChartOrderDraft((prev) => {
+                          const fromIdx = prev.indexOf(draggedChartId);
+                          const toIdx = prev.indexOf(chartId);
+                          if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return prev;
+                          const next = [...prev];
+                          next.splice(fromIdx, 1);
+                          next.splice(toIdx, 0, draggedChartId);
+                          return next;
+                        });
+                        setDraggedChartId(null);
+                      }}
+                      onDragEnd={() => setDraggedChartId(null)}
                     >
-                      ×
-                    </button>
-                  )}
-                  <CardContent className="pt-6">
-                    <EvolutionGraph data={evolution} />
-                  </CardContent>
-                </Card>
-              )}
-              {showLanguagesGraph && (
-                <Card className="relative">
-                  {editMode && isOwner && (
-                    <button
-                      type="button"
-                      className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
-                      onClick={() => setShowLanguagesGraph(false)}
-                      aria-label="Remove languages chart"
-                    >
-                      ×
-                    </button>
-                  )}
-                  <CardContent className="pt-6">
-                    <LanguageChart data={languages} />
-                  </CardContent>
-                </Card>
-              )}
+                      {isEvolution ? (
+                        <>
+                          {editMode && isOwner && (
+                            <button
+                              type="button"
+                              className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground z-10"
+                              onClick={() => setShowCommitsGraph(false)}
+                              aria-label="Remove contributions graph"
+                            >
+                              ×
+                            </button>
+                          )}
+                          <CardContent className="pt-6">
+                            <EvolutionGraph data={evolution} />
+                          </CardContent>
+                        </>
+                      ) : (
+                        <>
+                          {editMode && isOwner && (
+                            <button
+                              type="button"
+                              className="absolute right-2 top-2 flex h-9 w-9 items-center justify-center rounded-full border border-border bg-background/80 text-lg font-medium text-muted-foreground hover:bg-muted hover:text-foreground z-10"
+                              onClick={() => setShowLanguagesGraph(false)}
+                              aria-label="Remove languages chart"
+                            >
+                              ×
+                            </button>
+                          )}
+                          <CardContent className="pt-6">
+                            <LanguageChart data={languages} />
+                          </CardContent>
+                        </>
+                      )}
+                    </Card>
+                  );
+                  return CardWrapper;
+                })}
             </div>
             {editMode && isOwner && (
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
@@ -833,10 +989,10 @@ export function PortfolioView({
               </div>
             )}
           </section>
-        )}
-
-        {showDeveloperJourney && (developerTimeline.length > 0 || (editMode && isOwner)) && (
-          <section className="mb-12">
+            ) : null;
+          if (sectionId === "developer_journey")
+            return showDeveloperJourney && (developerTimeline.length > 0 || (editMode && isOwner)) ? (
+          <section key="developer_journey" className="mb-12">
             <div className="flex items-start justify-between gap-4 mb-1">
               <h2 className="text-xl font-semibold">Developer journey</h2>
               {editMode && isOwner && (
@@ -1135,15 +1291,16 @@ export function PortfolioView({
               </>
             )}
           </section>
-        )}
-
-        <section className="space-y-8">
+            ) : null;
+          if (sectionId === "projects")
+            return (
+        <section key="projects" className="space-y-8">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div>
               <h2 className="text-2xl font-semibold">Projects</h2>
               {editMode && isOwner && repos.length > 0 && (
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  Pin your top 4: use the pin and arrow buttons to reorder. First 4 appear at the top.
+                  Drag projects to reorder, or use the pin and arrow buttons. First 4 appear at the top.
                 </p>
               )}
             </div>
@@ -1208,9 +1365,19 @@ export function PortfolioView({
                 key={repo.id}
                 className={
                   editMode
-                    ? "transition-colors border-dashed border-border"
+                    ? `transition-colors border-dashed border-border ${draggedProjectId === repo.id ? "opacity-50" : ""} ${editMode && isOwner ? "cursor-grab active:cursor-grabbing" : ""}`
                     : "transition-colors hover:bg-muted/50 cursor-pointer"
                 }
+                draggable={editMode && isOwner}
+                onDragStart={() => editMode && isOwner && setDraggedProjectId(repo.id)}
+                onDragOver={(e) => { e.preventDefault(); if (editMode && isOwner && draggedProjectId && draggedProjectId !== repo.id) e.currentTarget.classList.add("ring-2", "ring-primary/30"); }}
+                onDragLeave={(e) => e.currentTarget.classList.remove("ring-2", "ring-primary/30")}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.currentTarget.classList.remove("ring-2", "ring-primary/30");
+                  if (editMode && isOwner && draggedProjectId) moveProjectToIndex(draggedProjectId, index);
+                }}
+                onDragEnd={() => setDraggedProjectId(null)}
                 onClick={
                   editMode
                     ? undefined
@@ -1336,6 +1503,9 @@ export function PortfolioView({
             );
           })}
         </section>
+            );
+          return null;
+        })}
       </main>
     </div>
   );

@@ -5,6 +5,8 @@ import { SignedInNav } from "@/components/SignedInNav";
 
 const SIGNIN_URL = "/api/auth/signin/github?callbackUrl=/generate";
 
+export const dynamic = "force-dynamic";
+
 export default async function HomePage() {
   const session = await getServerSession(authOptions);
 

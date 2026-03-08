@@ -12,7 +12,7 @@ const STEP_LABELS: Record<string, string> = {
   analyze: "Cloning & analyzing repo",
   summary: "Generating AI summary",
   build: "Preparing build",
-  diagram: "Creating architecture diagram",
+  diagram: "Creating diagrams (architecture, data flow, API routes, …)",
 };
 
 function jobProgress(

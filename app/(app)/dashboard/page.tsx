@@ -51,7 +51,7 @@ export default function DashboardPage() {
     analyze: "Cloning & analyzing repo",
     summary: "Generating AI summary",
     build: "Preparing build",
-    diagram: "Creating architecture diagram",
+    diagram: "Creating diagrams",
   };
   const [jobPoll, setJobPoll] = useState<Record<string, { status: string; progress: number; error?: string; stepLabel?: string }>>({});
   const [repoErrors, setRepoErrors] = useState<Record<string, string>>({});

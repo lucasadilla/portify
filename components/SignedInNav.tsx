@@ -1,5 +1,6 @@
 "use client";
 import Link from "next/link";
+import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 
 interface SignedInNavProps {
@@ -11,6 +12,12 @@ export function SignedInNav({ username }: SignedInNavProps) {
     username && username.trim().length > 0
       ? username.replace(/\s+/g, "-").toLowerCase()
       : null;
+
+  const handleSignOut = () => {
+    signOut({ redirect: false }).then(() => {
+      window.location.href = "/";
+    });
+  };
 
   return (
     <nav className="flex items-center gap-4">
@@ -29,11 +36,9 @@ export function SignedInNav({ username }: SignedInNavProps) {
           View portfolio
         </Link>
       )}
-      <form action="/api/auth/signout" method="POST">
-        <Button type="submit" variant="ghost" size="sm">
-          Sign out
-        </Button>
-      </form>
+      <Button type="button" variant="ghost" size="sm" onClick={handleSignOut}>
+        Sign out
+      </Button>
     </nav>
   );
 }

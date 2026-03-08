@@ -12,30 +12,14 @@ import {
 } from "@/lib/github";
 import type { GitHubRepo } from "@/lib/github";
 import { PortfolioView } from "@/app/u/[username]/PortfolioView";
+import {
+  DEMO_PORTFOLIO,
+  DEMO_EVOLUTION,
+  DEMO_LANGUAGES,
+  DEMO_DEVELOPER_TIMELINE,
+} from "@/lib/demoData";
 
 const MAX_REPOS_FOR_GRAPHS = 40;
-
-const DEMO_PORTFOLIO = {
-  slug: "demo",
-  bio: "Full-stack developer building with Next.js, TypeScript, and modern tooling. From commits to career.",
-  theme: "dark",
-  socials: { email: "demo@portify.dev", website: "https://portify.dev", linkedin: "https://linkedin.com/in/demo" },
-  user: {
-    name: "Demo Developer",
-    image: "https://avatars.githubusercontent.com/u/1?v=4",
-    email: "demo@portify.dev",
-  },
-  repos: [
-    {
-      id: "demo-1",
-      repoFullName: "portify/portify",
-      customTitle: "Portify",
-      customSummary: "AI-powered developer portfolio infrastructure. Transforms GitHub repos into a live portfolio with AI summaries, tech stack detection, and evolution graphs.",
-      detectedStackJson: JSON.stringify(["Next.js", "TypeScript", "Prisma", "TailwindCSS", "OpenAI"]),
-      artifacts: [] as { id: string; type: string; url: string }[],
-    },
-  ],
-};
 
 function toOneSentence(text: string, maxLength = 180): string {
   if (!text) return "";
@@ -77,7 +61,7 @@ export default async function PublicPortfolioPage({
         repos: {
           where: { status: "DONE" },
           orderBy: { pinnedOrder: "asc" },
-          include: { artifacts: true },
+          include: { artifacts: { orderBy: { sortOrder: "asc" } } },
         },
       },
     });
@@ -103,7 +87,15 @@ export default async function PublicPortfolioPage({
 
   if (!portfolio) {
     if (slug === "demo") {
-      return <PortfolioView portfolio={DEMO_PORTFOLIO} />;
+      return (
+        <PortfolioView
+          portfolio={DEMO_PORTFOLIO}
+          evolutionData={DEMO_EVOLUTION}
+          languageData={DEMO_LANGUAGES}
+          developerTimeline={DEMO_DEVELOPER_TIMELINE}
+          commitsTimeRange="year"
+        />
+      );
     }
     notFound();
   }
@@ -303,6 +295,13 @@ export default async function PublicPortfolioPage({
         backgroundStyle: (portfolio as { backgroundStyle?: string }).backgroundStyle ?? "minimal",
         displayName: (portfolio as { displayName?: string | null }).displayName ?? null,
         imageUrl: (portfolio as { imageUrl?: string | null }).imageUrl ?? null,
+        sectionOrder: (portfolio as { sectionOrderJson?: string | null }).sectionOrderJson
+          ? (JSON.parse((portfolio as { sectionOrderJson: string }).sectionOrderJson) as string[])
+          : undefined,
+        contributionsChartOrder: (portfolio as { contributionsChartOrderJson?: string | null }).contributionsChartOrderJson
+          ? (JSON.parse((portfolio as { contributionsChartOrderJson: string }).contributionsChartOrderJson) as string[])
+          : undefined,
+        colorPalette: (portfolio as { colorPalette?: string | null }).colorPalette ?? undefined,
         socials,
         user: {
           name:

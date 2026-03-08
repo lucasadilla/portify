@@ -4,7 +4,15 @@ import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { getAccessTokenForUser } from "@/lib/session";
 import { getRepoCommitHistory, getRepoLanguages } from "@/lib/github";
-import { ProjectPageView } from "./ProjectPageView";
+import { ProjectPageView } from "@/app/u/[username]/[repo]/ProjectPageView";
+import {
+  getDemoRepoByName,
+  DEMO_EVOLUTION,
+  DEMO_LANGUAGES,
+  DEMO_BACKGROUND_STYLE,
+  DEMO_COLOR_PALETTE,
+  DEMO_CONTRIBUTIONS_CHART_ORDER,
+} from "@/lib/demoData";
 
 export default async function ProjectPage({
   params,
@@ -17,6 +25,56 @@ export default async function ProjectPage({
   const slugNorm = slug.toLowerCase().trim();
   const repoName = decodeURIComponent(repoSegment);
 
+  if (slugNorm === "demo") {
+    const demoRepo = getDemoRepoByName(repoName);
+    if (!demoRepo) notFound();
+    const stack = demoRepo.detectedStackJson
+      ? (JSON.parse(demoRepo.detectedStackJson) as string[])
+      : [];
+    const screenshots = demoRepo.artifacts
+      .filter((a) => a.type === "screenshot")
+      .map((a, i) => ({
+        id: a.id,
+        url: a.url,
+        caption: ["Main interface", "Core feature", "Detail view"][i] ?? `Screenshot ${i + 1}`,
+      }));
+    const diagrams = demoRepo.artifacts
+      .filter((a) => a.type === "diagram")
+      .map((a) => ({
+        id: a.id,
+        url: a.url,
+        description: null as string | null,
+        kind: "kind" in a && typeof (a as { kind: string }).kind === "string" ? (a as { kind: string }).kind : undefined,
+      }));
+    return (
+      <ProjectPageView
+        portfolioSlug="demo"
+        userName="Demo Developer"
+        viewerUsername={viewerUsername}
+        isOwner={false}
+        backgroundStyle={DEMO_BACKGROUND_STYLE}
+        colorPalette={DEMO_COLOR_PALETTE}
+        contributionsChartOrder={DEMO_CONTRIBUTIONS_CHART_ORDER}
+        repoId={demoRepo.id}
+        repo={{
+          title: demoRepo.customTitle,
+          repoFullName: demoRepo.repoFullName,
+          description: demoRepo.customSummary,
+          projectWebsiteUrl: null,
+          showCommitsGraph: true,
+          showLanguagesGraph: true,
+          showScreenshots: true,
+          showDiagram: true,
+          stack,
+          commitData: DEMO_EVOLUTION,
+          languageData: DEMO_LANGUAGES,
+          screenshots,
+          diagrams,
+        }}
+      />
+    );
+  }
+
   const portfolio = await prisma.portfolio.findUnique({
     where: { slug: slugNorm },
     include: {
@@ -24,7 +82,7 @@ export default async function ProjectPage({
       repos: {
         where: { status: "DONE" },
         orderBy: { pinnedOrder: "asc" },
-        include: { artifacts: true },
+        include: { artifacts: { orderBy: { sortOrder: "asc" } } },
       },
     },
   });
@@ -81,14 +139,17 @@ export default async function ProjectPage({
     .filter((a) => a.type === "diagram")
     .map((a) => {
       let description: string | null = null;
+      let kind: string | undefined;
       if (a.metadata) {
         try {
-          description = (JSON.parse(a.metadata) as { description?: string }).description ?? null;
+          const m = JSON.parse(a.metadata) as { description?: string; diagramKind?: string; kind?: string };
+          description = m.description ?? null;
+          kind = m.diagramKind ?? m.kind;
         } catch {
           // ignore
         }
       }
-      return { id: a.id, url: a.url, description };
+      return { id: a.id, url: a.url, description, kind };
     });
 
   const defaultCaptions = [
@@ -111,12 +172,21 @@ export default async function ProjectPage({
     repoForView.projectWebsiteUrl ??
     (repo as Record<string, unknown>).projectWebsiteUrl ?? null;
 
+  const backgroundStyle = (portfolio as { backgroundStyle?: string }).backgroundStyle ?? "minimal";
+  const colorPalette = (portfolio as { colorPalette?: string | null }).colorPalette ?? undefined;
+  const contributionsChartOrder = (portfolio as { contributionsChartOrderJson?: string | null }).contributionsChartOrderJson
+    ? (JSON.parse((portfolio as { contributionsChartOrderJson: string }).contributionsChartOrderJson) as string[])
+    : undefined;
+
   return (
     <ProjectPageView
       portfolioSlug={portfolio.slug}
       userName={portfolio.user.name ?? portfolio.user.username ?? "Developer"}
       viewerUsername={viewerUsername}
       isOwner={!!isOwner}
+      backgroundStyle={backgroundStyle}
+      colorPalette={colorPalette}
+      contributionsChartOrder={contributionsChartOrder}
       repoId={repo.id}
       repo={{
         title: repo.customTitle ?? repo.repoFullName.split("/")[1] ?? repoName,

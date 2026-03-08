@@ -10,19 +10,34 @@ import { getTechBadgeClassName } from "@/lib/badgeColors";
 import { EvolutionGraph } from "@/components/EvolutionGraph";
 import { LanguageChart } from "@/components/LanguageChart";
 import { ArchitectureDiagram } from "@/components/ArchitectureDiagram";
-import { ArrowLeft, Github, ExternalLink, Globe } from "lucide-react";
+import { ArrowLeft, Github, ExternalLink, Globe, GripVertical } from "lucide-react";
 import { SignedInNav } from "@/components/SignedInNav";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
+import { PortfolioBackground } from "@/components/portfolio-backgrounds";
+import { getPaletteStyle } from "@/lib/colorPalettes";
+import { getDiagramKindLabel, DIAGRAM_KINDS } from "@/lib/diagramKinds";
 
 type ScreenshotItem = { id: string; url: string; caption: string };
-type DiagramItem = { id: string; url: string; description: string | null };
+type DiagramItem = { id: string; url: string; description: string | null; kind?: string };
+
+const DEFAULT_CHART_ORDER = ["evolution", "languages"] as const;
+function normalizeChartOrder(order: string[] | undefined): string[] {
+  const valid = new Set<string>(DEFAULT_CHART_ORDER);
+  if (!order?.length) return [...DEFAULT_CHART_ORDER];
+  const result = order.filter((id) => valid.has(id));
+  for (const id of DEFAULT_CHART_ORDER) if (!result.includes(id)) result.push(id);
+  return result;
+}
 
 type Props = {
   portfolioSlug: string;
   userName: string;
   viewerUsername?: string | null;
   isOwner?: boolean;
+  backgroundStyle?: string;
+  colorPalette?: string | null;
+  contributionsChartOrder?: string[];
   repoId: string;
   repo: {
     title: string;
@@ -46,6 +61,9 @@ export function ProjectPageView({
   userName,
   viewerUsername,
   isOwner,
+  backgroundStyle = "minimal",
+  colorPalette,
+  contributionsChartOrder,
   repoId,
   repo,
 }: Props) {
@@ -53,6 +71,12 @@ export function ProjectPageView({
   const repoUrl = `https://github.com/${repo.repoFullName}`;
 
   const [editMode, setEditMode] = useState(false);
+  const [contributionsChartOrderDraft, setContributionsChartOrderDraft] = useState<string[]>(() => normalizeChartOrder(contributionsChartOrder));
+  const [draggedChartId, setDraggedChartId] = useState<string | null>(null);
+  const [draggedScreenshotId, setDraggedScreenshotId] = useState<string | null>(null);
+  const [draggedDiagramId, setDraggedDiagramId] = useState<string | null>(null);
+  const effectiveChartOrder = editMode && isOwner ? contributionsChartOrderDraft : normalizeChartOrder(contributionsChartOrder);
+  const paletteStyle = getPaletteStyle(colorPalette);
   const [saving, setSaving] = useState(false);
   const [descriptionDraft, setDescriptionDraft] = useState(repo.description);
   const [projectWebsiteUrlDraft, setProjectWebsiteUrlDraft] = useState(repo.projectWebsiteUrl ?? "");
@@ -79,6 +103,7 @@ export function ProjectPageView({
   const [newScreenshotFile, setNewScreenshotFile] = useState<File | null>(null);
   const [newDiagramUrl, setNewDiagramUrl] = useState("");
   const [newDiagramDescription, setNewDiagramDescription] = useState("");
+  const [newDiagramKind, setNewDiagramKind] = useState<string>("architecture");
   const [newDiagramFile, setNewDiagramFile] = useState<File | null>(null);
   const [addingScreenshot, setAddingScreenshot] = useState(false);
   const [addingDiagram, setAddingDiagram] = useState(false);
@@ -109,6 +134,31 @@ export function ProjectPageView({
       return next;
     });
   }, [repo.description, repo.projectWebsiteUrl, repo.showCommitsGraph, repo.showLanguagesGraph, repo.showScreenshots, repo.showDiagram, repo.screenshots, repo.diagrams]);
+
+  useEffect(() => {
+    setContributionsChartOrderDraft(normalizeChartOrder(contributionsChartOrder));
+  }, [contributionsChartOrder]);
+
+  async function saveChartOrder(newOrder: string[]) {
+    const res = await fetch("/api/portfolio", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ contributionsChartOrder: newOrder }),
+    });
+    if (res.ok) {
+      setContributionsChartOrderDraft(newOrder);
+      router.refresh();
+    }
+  }
+
+  async function reorderArtifacts(orderedIds: string[]) {
+    const res = await fetch(`/api/portfolio/repos/${repoId}/artifacts/reorder`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ orderedIds }),
+    });
+    if (res.ok) router.refresh();
+  }
 
   async function saveRepo() {
     setSaving(true);
@@ -145,12 +195,14 @@ export function ProjectPageView({
     router.refresh();
   }
 
-  async function saveDiagramDescription(artifactId: string) {
+  async function saveDiagramDescription(artifactId: string, diagramKind?: string) {
     const description = diagramDescriptionDrafts[artifactId] ?? "";
+    const metadata: { description: string; diagramKind?: string } = { description };
+    if (diagramKind) metadata.diagramKind = diagramKind;
     await fetch(`/api/portfolio/repos/${repoId}/artifacts/${artifactId}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ metadata: { description } }),
+      body: JSON.stringify({ metadata }),
     });
     router.refresh();
   }
@@ -224,7 +276,10 @@ export function ProjectPageView({
         body: JSON.stringify({
           type: "diagram",
           url,
-          metadata: { description: newDiagramDescription.trim() || undefined },
+          metadata: {
+            description: newDiagramDescription.trim() || undefined,
+            diagramKind: newDiagramKind || "architecture",
+          },
         }),
       });
       router.refresh();
@@ -241,8 +296,9 @@ export function ProjectPageView({
   const canAddDiagram = newDiagramUrl.trim() || newDiagramFile;
 
   return (
-    <div className="min-h-screen bg-background">
-      <header className="border-b border-border/40">
+    <div className="min-h-screen relative" style={paletteStyle}>
+      <PortfolioBackground style={backgroundStyle} />
+      <header className="border-b border-border/40 relative z-10">
         <div className="container mx-auto px-4 h-14 flex items-center justify-between">
           <Link href="/" className="font-semibold text-lg tracking-tight">
             Portify
@@ -257,7 +313,7 @@ export function ProjectPageView({
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-10 max-w-4xl">
+      <main className="container mx-auto px-4 py-10 max-w-4xl relative z-10">
         <div className="mb-3 flex flex-wrap items-center gap-3">
           <Link
             href={`/${portfolioSlug}`}
@@ -406,21 +462,45 @@ export function ProjectPageView({
               )}
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {showCommitsGraph && repo.commitData.length > 0 && (
-                <Card>
-                  <CardContent className="pt-6">
-                    <EvolutionGraph data={repo.commitData} />
-                  </CardContent>
-                </Card>
-              )}
-              {showLanguagesGraph && repo.languageData.length > 0 && (
-                <Card>
-                  <CardContent className="pt-6">
-                    <LanguageChart data={repo.languageData} />
-                  </CardContent>
-                </Card>
-              )}
+              {effectiveChartOrder
+                .filter((id) => (id === "evolution" && showCommitsGraph && repo.commitData.length > 0) || (id === "languages" && showLanguagesGraph && repo.languageData.length > 0))
+                .map((chartId) => {
+                  const isEvolution = chartId === "evolution";
+                  return (
+                    <Card
+                      key={chartId}
+                      className={editMode && isOwner ? `cursor-grab active:cursor-grabbing ${draggedChartId === chartId ? "opacity-50" : ""}` : ""}
+                      draggable={editMode && isOwner}
+                      onDragStart={() => editMode && isOwner && setDraggedChartId(chartId)}
+                      onDragOver={(e) => { e.preventDefault(); if (editMode && isOwner) e.currentTarget.classList.add("ring-2", "ring-primary/50"); }}
+                      onDragLeave={(e) => e.currentTarget.classList.remove("ring-2", "ring-primary/50")}
+                      onDrop={(e) => {
+                        e.preventDefault();
+                        e.currentTarget.classList.remove("ring-2", "ring-primary/50");
+                        if (!editMode || !isOwner || !draggedChartId || draggedChartId === chartId) return;
+                        const prev = contributionsChartOrderDraft;
+                        const fromIdx = prev.indexOf(draggedChartId);
+                        const toIdx = prev.indexOf(chartId);
+                        if (fromIdx < 0 || toIdx < 0 || fromIdx === toIdx) return;
+                        const next = [...prev];
+                        next.splice(fromIdx, 1);
+                        next.splice(toIdx, 0, draggedChartId);
+                        setContributionsChartOrderDraft(next);
+                        setDraggedChartId(null);
+                        saveChartOrder(next);
+                      }}
+                      onDragEnd={() => setDraggedChartId(null)}
+                    >
+                      <CardContent className="pt-6">
+                        {isEvolution ? <EvolutionGraph data={repo.commitData} /> : <LanguageChart data={repo.languageData} />}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
             </div>
+            {editMode && isOwner && (showCommitsGraph || showLanguagesGraph) && (
+              <p className="mt-2 text-xs text-muted-foreground">Drag cards to swap their positions. Saves to your portfolio.</p>
+            )}
             {editMode && isOwner && !showCommitsGraph && !showLanguagesGraph && (
               <p className="text-sm text-muted-foreground">Turn on at least one graph above to show this section.</p>
             )}
@@ -439,10 +519,34 @@ export function ProjectPageView({
                 </label>
               )}
             </div>
+            {editMode && isOwner && repo.screenshots.length > 1 && (
+              <p className="text-xs text-muted-foreground mb-2">Drag cards to reorder.</p>
+            )}
             {showScreenshots && repo.screenshots.length > 0 ? (
               <div className="space-y-8">
-                {repo.screenshots.map((s) => (
-                  <Card key={s.id} className="relative">
+                {repo.screenshots.map((s, screenshotIndex) => (
+                  <Card
+                    key={s.id}
+                    className={`relative ${editMode && isOwner ? `cursor-grab active:cursor-grabbing ${draggedScreenshotId === s.id ? "opacity-50" : ""}` : ""}`}
+                    draggable={editMode && isOwner}
+                    onDragStart={() => editMode && isOwner && setDraggedScreenshotId(s.id)}
+                    onDragOver={(e) => { e.preventDefault(); if (editMode && isOwner && draggedScreenshotId && draggedScreenshotId !== s.id) e.currentTarget.classList.add("ring-2", "ring-primary/30"); }}
+                    onDragLeave={(e) => e.currentTarget.classList.remove("ring-2", "ring-primary/30")}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("ring-2", "ring-primary/30");
+                      if (!editMode || !isOwner || !draggedScreenshotId) return;
+                      const fromIdx = repo.screenshots.findIndex((x) => x.id === draggedScreenshotId);
+                      if (fromIdx < 0 || fromIdx === screenshotIndex) return;
+                      const next = [...repo.screenshots];
+                      const [removed] = next.splice(fromIdx, 1);
+                      next.splice(screenshotIndex, 0, removed);
+                      const orderedIds = next.map((x) => x.id).concat(repo.diagrams.map((d) => d.id));
+                      reorderArtifacts(orderedIds);
+                      setDraggedScreenshotId(null);
+                    }}
+                    onDragEnd={() => setDraggedScreenshotId(null)}
+                  >
                     {editMode && isOwner && (
                       <div className="absolute right-2 top-2 z-10 flex gap-1">
                         <Button
@@ -461,6 +565,9 @@ export function ProjectPageView({
                         >
                           Remove
                         </Button>
+                        <span className="flex items-center text-muted-foreground" title="Drag to reorder">
+                          <GripVertical className="h-4 w-4" />
+                        </span>
                       </div>
                     )}
                     <CardContent className="p-0">
@@ -560,11 +667,11 @@ export function ProjectPageView({
           </section>
         )}
 
-        {/* Architecture diagrams */}
+        {/* Diagrams (architecture, data flow, API routes, etc.) */}
         {(showDiagram || (editMode && isOwner)) && (repo.diagrams.length > 0 || (editMode && isOwner)) && (
           <section className="mb-10">
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-              <h2 className="text-xl font-semibold">Architecture</h2>
+              <h2 className="text-xl font-semibold">Diagrams</h2>
               {editMode && isOwner && (
                 <div className="flex items-center gap-2">
                   <label className="flex items-center gap-2 text-xs">
@@ -577,17 +684,41 @@ export function ProjectPageView({
                 </div>
               )}
             </div>
+            {editMode && isOwner && repo.diagrams.length > 1 && (
+              <p className="text-xs text-muted-foreground mb-2">Drag cards to reorder.</p>
+            )}
             {showDiagram && repo.diagrams.length > 0 && (
               <div className="space-y-8">
-                {repo.diagrams.map((d) => (
-                  <Card key={d.id} className="relative">
+                {repo.diagrams.map((d, diagramIndex) => (
+                  <Card
+                    key={d.id}
+                    className={`relative ${editMode && isOwner ? `cursor-grab active:cursor-grabbing ${draggedDiagramId === d.id ? "opacity-50" : ""}` : ""}`}
+                    draggable={editMode && isOwner}
+                    onDragStart={() => editMode && isOwner && setDraggedDiagramId(d.id)}
+                    onDragOver={(e) => { e.preventDefault(); if (editMode && isOwner && draggedDiagramId && draggedDiagramId !== d.id) e.currentTarget.classList.add("ring-2", "ring-primary/30"); }}
+                    onDragLeave={(e) => e.currentTarget.classList.remove("ring-2", "ring-primary/30")}
+                    onDrop={(e) => {
+                      e.preventDefault();
+                      e.currentTarget.classList.remove("ring-2", "ring-primary/30");
+                      if (!editMode || !isOwner || !draggedDiagramId) return;
+                      const fromIdx = repo.diagrams.findIndex((x) => x.id === draggedDiagramId);
+                      if (fromIdx < 0 || fromIdx === diagramIndex) return;
+                      const next = [...repo.diagrams];
+                      const [removed] = next.splice(fromIdx, 1);
+                      next.splice(diagramIndex, 0, removed);
+                      const orderedIds = repo.screenshots.map((s) => s.id).concat(next.map((x) => x.id));
+                      reorderArtifacts(orderedIds);
+                      setDraggedDiagramId(null);
+                    }}
+                    onDragEnd={() => setDraggedDiagramId(null)}
+                  >
                     {editMode && isOwner && (
                       <div className="absolute right-2 top-2 z-10 flex gap-1">
                         <Button
                           size="sm"
                           variant="secondary"
                           className="h-7 text-xs"
-                          onClick={() => saveDiagramDescription(d.id)}
+                          onClick={() => saveDiagramDescription(d.id, d.kind)}
                         >
                           Save description
                         </Button>
@@ -599,9 +730,15 @@ export function ProjectPageView({
                         >
                           Remove diagram
                         </Button>
+                        <span className="flex items-center text-muted-foreground" title="Drag to reorder">
+                          <GripVertical className="h-4 w-4" />
+                        </span>
                       </div>
                     )}
                     <CardContent className="pt-6">
+                      <h3 className="text-sm font-medium text-muted-foreground mb-3">
+                        {getDiagramKindLabel(d.kind)}
+                      </h3>
                       <ArchitectureDiagram url={d.url} />
                     </CardContent>
                     <div className="px-6 pb-4">
@@ -631,6 +768,20 @@ export function ProjectPageView({
                   <p className="text-xs text-muted-foreground mb-3">
                     Upload an image from your computer or paste a diagram image URL.
                   </p>
+                  <div className="mb-3">
+                    <Label className="text-xs text-muted-foreground">Diagram type</Label>
+                    <select
+                      className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
+                      value={newDiagramKind}
+                      onChange={(e) => setNewDiagramKind(e.target.value)}
+                    >
+                      {DIAGRAM_KINDS.map((k) => (
+                        <option key={k.value} value={k.value}>
+                          {k.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
                   {diagramUploadError && (
                     <p className="text-xs text-destructive mb-2">{diagramUploadError}</p>
                   )}

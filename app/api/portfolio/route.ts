@@ -21,6 +21,9 @@ export async function PATCH(req: NextRequest) {
     backgroundOptionsJson: bgOptions,
     displayName,
     imageUrl,
+    sectionOrder,
+    contributionsChartOrder,
+    colorPalette: colorPaletteBody,
   } = body as {
     bio?: string;
     socialsJson?: Record<string, string>;
@@ -31,6 +34,9 @@ export async function PATCH(req: NextRequest) {
     backgroundOptionsJson?: string | null;
     displayName?: string | null;
     imageUrl?: string | null;
+    sectionOrder?: string[] | null;
+    contributionsChartOrder?: string[] | null;
+    colorPalette?: string | null;
   };
 
   const data: {
@@ -43,6 +49,9 @@ export async function PATCH(req: NextRequest) {
     backgroundOptionsJson?: string | null;
     displayName?: string | null;
     imageUrl?: string | null;
+    sectionOrderJson?: string | null;
+    contributionsChartOrderJson?: string | null;
+    colorPalette?: string | null;
   } = {};
   if (bio !== undefined) data.bio = bio;
   if (socialsJson !== undefined) data.socialsJson = JSON.stringify(socialsJson);
@@ -52,6 +61,9 @@ export async function PATCH(req: NextRequest) {
   if (bgOptions !== undefined) data.backgroundOptionsJson = bgOptions === "" ? null : bgOptions;
   if (displayName !== undefined) data.displayName = displayName === "" ? null : displayName;
   if (imageUrl !== undefined) data.imageUrl = imageUrl === "" ? null : imageUrl;
+  if (sectionOrder !== undefined) data.sectionOrderJson = Array.isArray(sectionOrder) ? JSON.stringify(sectionOrder) : null;
+  if (contributionsChartOrder !== undefined) data.contributionsChartOrderJson = Array.isArray(contributionsChartOrder) ? JSON.stringify(contributionsChartOrder) : null;
+  if (colorPaletteBody !== undefined) data.colorPalette = colorPaletteBody === "" ? null : colorPaletteBody;
 
   if (newSlug !== undefined) {
     const slug = newSlug.trim().toLowerCase().replace(/\s+/g, "-");
