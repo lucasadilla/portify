@@ -46,6 +46,7 @@ export default async function PublicPortfolioPage({
   const viewerSession = await getServerSession(authOptions);
   const viewerUsername = viewerSession?.user?.username ?? viewerSession?.user?.name ?? null;
   let portfolio: Awaited<ReturnType<typeof prisma.portfolio.findUnique<{
+    where: { slug: string };
     include: {
       user: true;
       timelineEntries: true;
