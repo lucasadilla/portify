@@ -28,6 +28,7 @@
     "@radix-ui/react-switch": "^1.1.1",
     "@radix-ui/react-tabs": "^1.1.1",
     "@radix-ui/react-toast": "^1.2.2",
+    "@vercel/analytics": "^1.6.1",
     "bullmq": "^5.34.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
