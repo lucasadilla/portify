@@ -224,8 +224,74 @@ export default async function HomePage() {
           </div>
         </section>
 
+        {/* How it works */}
+        <section className="container mx-auto px-4 pt-10 md:pt-14 pb-8 md:pb-10">
+          <div className="max-w-3xl mb-4 md:mb-6">
+            <h2 className="text-xl md:text-2xl font-semibold mb-2">How Portify works</h2>
+            <p className="text-sm md:text-base text-muted-foreground">
+              Three quick steps from raw GitHub activity to a portfolio link you&apos;re not embarrassed to share.
+            </p>
+          </div>
+          <div className="relative overflow-hidden rounded-2xl border border-border bg-card/95">
+            <div className="pointer-events-none absolute inset-0 opacity-60">
+              <div className="absolute inset-x-10 -top-24 h-40 rounded-full bg-[radial-gradient(circle,theme(colors.emerald.500),transparent_65%)] blur-3xl" />
+              <div className="absolute inset-x-24 bottom-0 h-40 rounded-full bg-[radial-gradient(circle,theme(colors.violet.500),transparent_65%)] blur-3xl" />
+            </div>
+            <div className="relative grid grid-cols-1 md:grid-cols-3 divide-y md:divide-y-0 md:divide-x divide-border">
+              <div className="p-5 md:p-6 flex flex-col gap-3">
+                <div className="inline-flex items-center gap-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-emerald-500/15 text-[12px] font-semibold text-emerald-300 border border-emerald-500/40">
+                    1
+                  </span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-emerald-300/80">
+                    Connect GitHub
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold mb-1.5">Pick the repos that represent you</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    Sign in with GitHub and choose a handful of projects. Portify reads commits, languages, and metadata.
+                  </p>
+                </div>
+              </div>
+              <div className="p-5 md:p-6 flex flex-col gap-3">
+                <div className="inline-flex items-center gap-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-sky-500/15 text-[12px] font-semibold text-sky-300 border border-sky-500/40">
+                    2
+                  </span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-sky-300/80">
+                    Generate
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold mb-1.5">Portify builds the narrative for you</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    We write repo summaries, detect stacks, build graphs, and stitch it into a single page that feels like a personal landing, not a CV. With the ability to add your own edits to the portfolio.
+                  </p>
+                </div>
+              </div>
+              <div className="p-5 md:p-6 flex flex-col gap-3">
+                <div className="inline-flex items-center gap-2">
+                  <span className="inline-flex h-7 w-7 items-center justify-center rounded-full bg-violet-500/15 text-[12px] font-semibold text-violet-300 border border-violet-500/40">
+                    3
+                  </span>
+                  <span className="text-[11px] uppercase tracking-[0.16em] text-violet-300/80">
+                    Share &amp; forget
+                  </span>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold mb-1.5">Share one URL that stays fresh</h3>
+                  <p className="text-xs md:text-sm text-muted-foreground">
+                    You get a clean slug (like <span className="font-mono">/yourname</span>) you can drop into applications, DMs, and bios while Portify quietly keeps it in sync.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </section>
+
         {/* What you get */}
-        <section className="container mx-auto px-4 py-10 md:py-14">
+        <section className="container mx-auto px-4 pb-12 md:pb-16">
           <div className="max-w-3xl mb-8">
             <h2 className="text-xl md:text-2xl font-semibold mb-2">What Portify gives you, beyond a link tree</h2>
             <p className="text-sm md:text-base text-muted-foreground">
