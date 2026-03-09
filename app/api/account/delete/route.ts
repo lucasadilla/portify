@@ -9,12 +9,39 @@ import { prisma } from "@/lib/db";
  * (portfolio, repos, artifacts, jobs, sessions, accounts).
  */
 export async function DELETE() {
-  const session = await getServerSession(authOptions);
-  if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  await prisma.user.delete({
-    where: { id: session.user.id },
-  });
+    const userId = session.user.id;
 
-  return NextResponse.json({ ok: true });
+    await prisma.$transaction(async (tx) => {
+      const portfolio = await tx.portfolio.findUnique({
+        where: { userId },
+        select: { id: true, repos: { select: { id: true } } },
+      });
+
+      if (portfolio) {
+        const repoIds = portfolio.repos.map((r) => r.id);
+        await tx.repoArtifact.deleteMany({ where: { portfolioRepoId: { in: repoIds } } });
+        await tx.job.deleteMany({ where: { portfolioRepoId: { in: repoIds } } });
+        await tx.portfolioRepo.deleteMany({ where: { portfolioId: portfolio.id } });
+        await tx.portfolioTimelineEntry.deleteMany({ where: { portfolioId: portfolio.id } });
+        await tx.portfolio.delete({ where: { id: portfolio.id } });
+      }
+
+      await tx.session.deleteMany({ where: { userId } });
+      await tx.account.deleteMany({ where: { userId } });
+      await tx.user.delete({ where: { id: userId } });
+    });
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[api/account/delete]", err);
+    const message = err instanceof Error ? err.message : "Unknown error";
+    return NextResponse.json(
+      { error: "Failed to delete account", details: process.env.NODE_ENV === "development" ? message : undefined },
+      { status: 500 }
+    );
+  }
 }
