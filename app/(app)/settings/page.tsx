@@ -1,27 +1,40 @@
 "use client";
 
 import { useState } from "react";
-import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, AlertTriangle } from "lucide-react";
 
+const SIGNOUT_URL = "/api/auth/signout?callbackUrl=" + encodeURIComponent("/");
+
 export default function SettingsPage() {
-  const router = useRouter();
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   async function handleDeleteAccount() {
     if (!confirmDelete) {
       setConfirmDelete(true);
+      setDeleteError(null);
       return;
     }
     setDeleting(true);
+    setDeleteError(null);
     try {
-      const res = await fetch("/api/account/delete", { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete account");
-      window.location.replace("/api/auth/signout?callbackUrl=" + encodeURIComponent("/"));
+      const res = await fetch("/api/account/delete", {
+        method: "DELETE",
+        credentials: "include",
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        setDeleteError((data.error as string) || data.details || "Failed to delete account");
+        setDeleting(false);
+        return;
+      }
+      window.location.href = SIGNOUT_URL;
+      return;
     } catch {
+      setDeleteError("Network error. Try again or sign out below.");
       setDeleting(false);
     }
   }
@@ -49,7 +62,10 @@ export default function SettingsPage() {
               <p className="text-sm text-muted-foreground">
                 Are you sure? Your portfolio, projects, and all generated content will be removed.
               </p>
-              <div className="flex gap-2">
+              {deleteError && (
+                <p className="text-sm text-destructive">{deleteError}</p>
+              )}
+              <div className="flex flex-wrap gap-2">
                 <Button
                   variant="outline"
                   size="sm"
@@ -66,6 +82,15 @@ export default function SettingsPage() {
                 >
                   {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : "Yes, delete my account"}
                 </Button>
+                {deleteError && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => { window.location.href = SIGNOUT_URL; }}
+                  >
+                    Sign out anyway
+                  </Button>
+                )}
               </div>
             </>
           ) : (

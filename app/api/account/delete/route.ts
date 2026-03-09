@@ -13,17 +13,17 @@ export async function DELETE() {
     const session = await getServerSession(authOptions);
     if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const userId = session.user.id;
-
-    const user = await prisma.user.findUnique({
-      where: { id: userId },
+    let user = await prisma.user.findUnique({
+      where: { id: session.user.id },
       select: { id: true },
     });
-    if (!user) {
-      await prisma.session.deleteMany({ where: { userId } });
-      await prisma.account.deleteMany({ where: { userId } });
-      return NextResponse.json({ ok: true });
+    if (!user && session.user.email) {
+      user = await prisma.user.findUnique({
+        where: { email: session.user.email },
+        select: { id: true },
+      });
     }
+    const userId = user?.id ?? session.user.id;
 
     await prisma.$transaction(
       async (tx) => {
@@ -45,7 +45,7 @@ export async function DELETE() {
 
         await tx.session.deleteMany({ where: { userId } });
         await tx.account.deleteMany({ where: { userId } });
-        await tx.user.delete({ where: { id: userId } });
+        await tx.user.deleteMany({ where: { id: userId } });
       },
       { timeout: 15000 }
     );
