@@ -31,10 +31,24 @@ function jobProgress(
 
 type Repo = { id: string; repoFullName: string; status: string };
 type Portfolio = { id: string; slug: string; repos: Repo[] };
+type GitHubRepo = {
+  id: number;
+  fullName: string;
+  name: string;
+  description: string | null;
+  defaultBranch: string;
+  private: boolean;
+  htmlUrl: string;
+  language: string | null;
+  stargazersCount: number;
+  pushedAt: string;
+};
 
 export default function GeneratePage() {
   const router = useRouter();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
+  const [repos, setRepos] = useState<GitHubRepo[]>([]);
+  const [selectedRepoFullNames, setSelectedRepoFullNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   const [building, setBuilding] = useState(false);
   const [syncResult, setSyncResult] = useState<{ slug: string; added: number } | null>(null);
@@ -49,42 +63,51 @@ export default function GeneratePage() {
     return data.portfolio;
   }, []);
 
+  const fetchRepos = useCallback(async () => {
+    const res = await fetch("/api/repos");
+    if (!res.ok) return;
+    const data = await res.json();
+    setRepos(data);
+  }, []);
+
   useEffect(() => {
     (async () => {
       setLoading(true);
-      await fetchPortfolio();
+      await Promise.all([fetchPortfolio(), fetchRepos()]);
       setLoading(false);
     })();
-  }, [fetchPortfolio]);
+  }, [fetchPortfolio, fetchRepos]);
 
   // Poll when building: aggregate progress and pick one active job for step label
   useEffect(() => {
-    if (!building || !portfolio?.repos?.length) return;
-    const total = portfolio.repos.length;
-    const done = portfolio.repos.filter((r) => r.status === "DONE").length;
-    const failed = portfolio.repos.filter((r) => r.status === "FAILED").length;
-    const pending = portfolio.repos.filter((r) => r.status === "QUEUED" || r.status === "PROCESSING");
-    setOverallProgress(total ? Math.round(((done + failed) / total) * 100) : 0);
-
-    if (pending.length === 0) {
-      setCurrentStepLabel("");
-      setActiveJobStatus(null);
-      return;
-    }
-    const firstPendingId = pending[0].id;
+    if (!building) return;
     const t = setInterval(async () => {
+      const latest = await fetchPortfolio();
+      if (!latest?.repos?.length) return;
+      const total = latest.repos.length;
+      const done = latest.repos.filter((r: Repo) => r.status === "DONE").length;
+      const failed = latest.repos.filter((r: Repo) => r.status === "FAILED").length;
+      const pending = latest.repos.filter(
+        (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
+      );
+      setOverallProgress(total ? Math.round(((done + failed) / total) * 100) : 0);
+
+      if (pending.length === 0) {
+        setCurrentStepLabel("");
+        setActiveJobStatus(null);
+        setBuilding(false);
+        return;
+      }
+
+      const firstPendingId = pending[0].id;
       const res = await fetch(`/api/job-status?id=${firstPendingId}`).then((x) => x.json());
       const { progress, stepLabel } = jobProgress(res.status, res.jobs ?? []);
       setCurrentStepLabel(stepLabel);
       setActiveJobStatus({ progress, stepLabel });
-      const updated = await fetchPortfolio();
-      if (updated?.repos) {
-        const allDone = updated.repos.every((r: Repo) => r.status === "DONE" || r.status === "FAILED");
-        if (allDone) setBuilding(false);
-      }
     }, 2000);
+
     return () => clearInterval(t);
-  }, [building, portfolio?.repos?.length, fetchPortfolio]);
+  }, [building, fetchPortfolio]);
 
   // When building finishes (all repos DONE or FAILED), redirect after a short delay
   useEffect(() => {
@@ -98,22 +121,54 @@ export default function GeneratePage() {
   }, [building, portfolio, syncResult, router]);
 
   async function handleGenerate() {
+    if (selectedRepoFullNames.size === 0) {
+      setCurrentStepLabel("Select at least one repo to generate.");
+      return;
+    }
+
     setBuilding(true);
     setSyncResult(null);
     setOverallProgress(0);
-    setCurrentStepLabel("Adding your repos…");
+    setCurrentStepLabel("Adding selected repos…");
+
     try {
-      const res = await fetch("/api/portfolio/sync", { method: "POST" });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.error || "Sync failed");
-      setSyncResult({ slug: data.portfolio.slug, added: data.added });
+      const addedIds: string[] = [];
+
+      for (const fullName of selectedRepoFullNames) {
+        const repo = repos.find((r) => r.fullName === fullName);
+        if (!repo) continue;
+        const res = await fetch("/api/portfolio/repos", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ repoFullName: repo.fullName, branch: repo.defaultBranch }),
+        });
+        const data = await res.json();
+        if (res.ok && data.repo?.id) {
+          addedIds.push(data.repo.id as string);
+        }
+      }
+
       await fetchPortfolio();
-      if (data.added === 0 && portfolio?.repos?.length) {
-        setCurrentStepLabel("Portfolio already up to date.");
+
+      if (addedIds.length === 0) {
+        setCurrentStepLabel("No new repos were added.");
         setBuilding(false);
-      } else if (data.added === 0) {
-        setCurrentStepLabel("No new repos to add.");
-        setBuilding(false);
+        return;
+      }
+
+      setCurrentStepLabel("Queuing jobs for selected repos…");
+
+      for (const id of addedIds) {
+        await fetch("/api/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ portfolioRepoId: id }),
+        });
+      }
+
+      const updated = await fetchPortfolio();
+      if (updated?.slug) {
+        setSyncResult({ slug: updated.slug, added: addedIds.length });
       }
     } catch (e) {
       setCurrentStepLabel(e instanceof Error ? e.message : "Something went wrong.");
@@ -136,7 +191,7 @@ export default function GeneratePage() {
   }
 
   return (
-    <div className="max-w-xl mx-auto flex flex-col items-center text-center gap-8">
+    <div className="max-w-4xl mx-auto flex flex-col items-center text-center gap-10">
       {building && (
         <div className="w-full rounded-2xl border border-border bg-card/95 px-5 py-4 text-left shadow-sm">
           <div className="flex items-start gap-3 mb-4">
@@ -169,15 +224,15 @@ export default function GeneratePage() {
           <Sparkles className="h-12 w-12 text-primary" />
         </div>
         <h1 className="text-3xl font-bold tracking-tight mb-2">Generate your portfolio</h1>
-        <p className="text-muted-foreground mb-8">
-          We’ll add all your public GitHub repos and build summaries and diagrams for each. Add your own screenshots on each project page. You can add or remove projects later from your portfolio page.
+        <p className="text-muted-foreground mb-6 max-w-2xl">
+          Pick the GitHub repos you actually want to showcase. We&apos;ll generate summaries, diagrams, and graphs for the ones you select.
         </p>
-        <Button size="lg" className="gap-2" onClick={handleGenerate} disabled={building}>
+        <Button size="lg" className="gap-2 mb-4" onClick={handleGenerate} disabled={building}>
           <Sparkles className="h-5 w-5" />
           {building ? "Generating…" : "Generate portfolio"}
         </Button>
         {showViewPortfolio && (
-          <div className="mt-8 flex flex-col gap-3">
+          <div className="mt-4 flex flex-col gap-3">
             <p className="text-sm text-muted-foreground">
               {hasRepos ? "Your portfolio is ready." : "Add repos from GitHub, then generate to build your portfolio."}
             </p>
@@ -186,6 +241,87 @@ export default function GeneratePage() {
             </Link>
           </div>
         )}
+      </div>
+
+      <div className="w-full text-left space-y-4">
+        <div className="flex items-center justify-between gap-2">
+          <h2 className="text-sm font-semibold">Select repos to include</h2>
+          <button
+            type="button"
+            className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-4"
+            onClick={() => {
+              if (selectedRepoFullNames.size === repos.length) {
+                setSelectedRepoFullNames(new Set());
+              } else {
+                setSelectedRepoFullNames(new Set(repos.map((r) => r.fullName)));
+              }
+            }}
+          >
+            {selectedRepoFullNames.size === repos.length ? "Clear selection" : "Select all"}
+          </button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          We only generate for the repos you pick. You can always add more later from the dashboard.
+        </p>
+        <div className="mt-2 max-h-[420px] w-full overflow-y-auto rounded-xl border border-border/60 bg-card/90">
+          {repos.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center">
+              No public repos found. Make sure Portify has access to your GitHub account.
+            </div>
+          ) : (
+            <ul className="divide-y divide-border/60">
+              {repos.map((r) => {
+                const inPortfolio = portfolio?.repos?.some((p) => p.repoFullName === r.fullName);
+                const checked = selectedRepoFullNames.has(r.fullName);
+                return (
+                  <li
+                    key={r.id}
+                    className="flex items-start gap-3 px-4 py-3 hover:bg-muted/40 text-left text-sm"
+                  >
+                    <input
+                      type="checkbox"
+                      className="mt-1 h-4 w-4 rounded border border-border bg-background"
+                      checked={checked}
+                      onChange={(e) => {
+                        setSelectedRepoFullNames((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(r.fullName);
+                          else next.delete(r.fullName);
+                          return next;
+                        });
+                      }}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium truncate">{r.fullName}</p>
+                        {inPortfolio && (
+                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/40">
+                            In portfolio
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {r.description ?? "No description"}
+                      </p>
+                      <div className="mt-1 flex flex-wrap items-center gap-3 text-[11px] text-muted-foreground">
+                        {r.language && <span>{r.language}</span>}
+                        <span>★ {r.stargazersCount}</span>
+                        <span>
+                          Updated{" "}
+                          {new Date(r.pushedAt).toLocaleDateString(undefined, {
+                            year: "numeric",
+                            month: "short",
+                            day: "numeric",
+                          })}
+                        </span>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
       </div>
     </div>
   );
