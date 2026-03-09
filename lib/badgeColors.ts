@@ -3,18 +3,30 @@
  * Same tech name always gets the same color.
  */
 const TECH_BADGE_PALETTE = [
-  "border-blue-500/40 bg-blue-500/15 text-blue-700 dark:text-blue-300",
-  "border-emerald-500/40 bg-emerald-500/15 text-emerald-700 dark:text-emerald-300",
-  "border-violet-500/40 bg-violet-500/15 text-violet-700 dark:text-violet-300",
-  "border-amber-500/40 bg-amber-500/15 text-amber-700 dark:text-amber-300",
-  "border-rose-500/40 bg-rose-500/15 text-rose-700 dark:text-rose-300",
-  "border-sky-500/40 bg-sky-500/15 text-sky-700 dark:text-sky-300",
-  "border-teal-500/40 bg-teal-500/15 text-teal-700 dark:text-teal-300",
-  "border-indigo-500/40 bg-indigo-500/15 text-indigo-700 dark:text-indigo-300",
-  "border-fuchsia-500/40 bg-fuchsia-500/15 text-fuchsia-700 dark:text-fuchsia-300",
-  "border-orange-500/40 bg-orange-500/15 text-orange-700 dark:text-orange-300",
-  "border-cyan-500/40 bg-cyan-500/15 text-cyan-700 dark:text-cyan-300",
-  "border-pink-500/40 bg-pink-500/15 text-pink-700 dark:text-pink-300",
+  // Blue
+  "border-blue-500/80 bg-blue-500/25 text-blue-900 dark:bg-blue-500/40 dark:text-blue-50",
+  // Emerald / green
+  "border-emerald-500/80 bg-emerald-500/25 text-emerald-900 dark:bg-emerald-500/40 dark:text-emerald-50",
+  // Violet / purple
+  "border-violet-500/80 bg-violet-500/25 text-violet-900 dark:bg-violet-500/40 dark:text-violet-50",
+  // Amber / yellow
+  "border-amber-500/80 bg-amber-500/25 text-amber-900 dark:bg-amber-500/40 dark:text-amber-50",
+  // Rose / red-pink
+  "border-rose-500/80 bg-rose-500/25 text-rose-900 dark:bg-rose-500/40 dark:text-rose-50",
+  // Sky
+  "border-sky-500/80 bg-sky-500/25 text-sky-900 dark:bg-sky-500/40 dark:text-sky-50",
+  // Teal
+  "border-teal-500/80 bg-teal-500/25 text-teal-900 dark:bg-teal-500/40 dark:text-teal-50",
+  // Indigo
+  "border-indigo-500/80 bg-indigo-500/25 text-indigo-900 dark:bg-indigo-500/40 dark:text-indigo-50",
+  // Fuchsia
+  "border-fuchsia-500/80 bg-fuchsia-500/25 text-fuchsia-900 dark:bg-fuchsia-500/40 dark:text-fuchsia-50",
+  // Orange
+  "border-orange-500/80 bg-orange-500/25 text-orange-900 dark:bg-orange-500/40 dark:text-orange-50",
+  // Cyan
+  "border-cyan-500/80 bg-cyan-500/25 text-cyan-900 dark:bg-cyan-500/40 dark:text-cyan-50",
+  // Pink
+  "border-pink-500/80 bg-pink-500/25 text-pink-900 dark:bg-pink-500/40 dark:text-pink-50",
 ] as const;
 
 function hashString(str: string): number {
