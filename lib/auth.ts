@@ -82,7 +82,7 @@ export const authOptions: NextAuthOptions = {
     // Required on http://localhost so the OAuth callback can read state/code_verifier
     useSecureCookies: process.env.NEXTAUTH_URL?.startsWith("https://") ?? false,
   },
-};
+} as NextAuthOptions;
 
 if (process.env.NODE_ENV === "development" && (!githubId || !githubSecret)) {
   console.warn(

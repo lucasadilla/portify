@@ -95,10 +95,10 @@ export async function runScreenshot(
   const stack = runPlan.framework ? [runPlan.framework] : [];
   const repoName = path.basename(repoDir.replace(/-/g, "/").split("/").pop() ?? "repo");
   let created = 0;
+  const s3Available = !!s3 && !!meta;
 
   const tryLiveScreenshots = async (): Promise<boolean> => {
     if (!buildResult.runnable || !buildResult.port) return false;
-    const s3Available = !!s3 && !!meta;
     const baseUrl = `http://127.0.0.1:${buildResult.port}`;
     try {
       const browser = await chromium.launch({ headless: true });
@@ -241,7 +241,6 @@ export async function runScreenshot(
       await page.waitForTimeout(LOAD_WAIT_MS);
       const buf = await page.screenshot({ type: "png" });
       await browser.close();
-      const s3Available = !!s3;
       if (s3Available) {
         const key = s3Key(meta.userId, meta.repoId, "github-repo");
         const url = await uploadBuffer(key, Buffer.from(buf), "image/png");

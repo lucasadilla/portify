@@ -637,7 +637,7 @@ export function PortfolioView({
           <div className="mb-6 flex flex-wrap items-center gap-3 text-xs md:text-sm">
             <Button
               variant={editMode ? "default" : "outline"}
-              size="xs"
+              size="sm"
               className="h-7 px-3 text-xs"
               onClick={() => setEditMode((v) => !v)}
             >
@@ -1463,7 +1463,7 @@ export function PortfolioView({
                       <div className="flex items-center gap-2">
                         <Button
                           type="button"
-                          size="xs"
+                          size="sm"
                           variant="outline"
                           onClick={(e) => {
                             e.stopPropagation();
@@ -1474,7 +1474,7 @@ export function PortfolioView({
                         </Button>
                         <Button
                           type="button"
-                          size="xs"
+                          size="sm"
                           variant="ghost"
                           className="text-destructive hover:text-destructive"
                           onClick={(e) => {
