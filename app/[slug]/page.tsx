@@ -180,7 +180,7 @@ export default async function PublicPortfolioPage({
     try {
       reposForGraphs = await getGitHubRepos(token);
     } catch {
-      reposForGraphs = portfolio.repos.map((r) => ({
+      reposForGraphs = (portfolio.repos.map((r) => ({
         id: r.id,
         fullName: r.repoFullName,
         name: r.repoFullName.split("/").pop() ?? r.repoFullName,
@@ -192,7 +192,7 @@ export default async function PublicPortfolioPage({
         stargazersCount: 0,
         pushedAt: "",
         createdAt: "",
-      })) as GitHubRepo[];
+      })) as unknown) as GitHubRepo[];
     }
     const reposSlice = reposForGraphs.slice(0, MAX_REPOS_FOR_GRAPHS);
 
