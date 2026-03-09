@@ -168,9 +168,12 @@ export default async function ProjectPage({
     showScreenshots?: boolean;
     showDiagram?: boolean;
   };
-  const projectWebsiteUrl =
+  const rawProjectWebsiteUrl =
     repoForView.projectWebsiteUrl ??
-    (repo as Record<string, unknown>).projectWebsiteUrl ?? null;
+    (repo as Record<string, unknown>).projectWebsiteUrl ??
+    null;
+  const projectWebsiteUrl: string | null =
+    typeof rawProjectWebsiteUrl === "string" ? rawProjectWebsiteUrl : null;
 
   const backgroundStyle = (portfolio as { backgroundStyle?: string }).backgroundStyle ?? "minimal";
   const colorPalette = (portfolio as { colorPalette?: string | null }).colorPalette ?? undefined;
