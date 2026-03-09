@@ -1,11 +1,10 @@
 "use client";
 
 import { useState } from "react";
+import { signOut } from "next-auth/react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Loader2, AlertTriangle } from "lucide-react";
-
-const SIGNOUT_URL = "/api/auth/signout?callbackUrl=" + encodeURIComponent("/");
 
 export default function SettingsPage() {
   const [confirmDelete, setConfirmDelete] = useState(false);
@@ -31,7 +30,7 @@ export default function SettingsPage() {
         setDeleting(false);
         return;
       }
-      window.location.href = SIGNOUT_URL;
+      await signOut({ callbackUrl: "/", redirect: true });
       return;
     } catch {
       setDeleteError("Network error. Try again or sign out below.");
@@ -86,7 +85,7 @@ export default function SettingsPage() {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => { window.location.href = SIGNOUT_URL; }}
+                    onClick={() => signOut({ callbackUrl: "/", redirect: true })}
                   >
                     Sign out anyway
                   </Button>
