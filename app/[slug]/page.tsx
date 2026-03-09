@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
@@ -98,6 +98,13 @@ export default async function PublicPortfolioPage({
           commitsTimeRange="year"
         />
       );
+    }
+    const viewerSlug =
+      viewerSession?.user?.username?.trim()
+        ? viewerSession.user.username.replace(/\s+/g, "-").toLowerCase()
+        : null;
+    if (viewerSlug && slug === viewerSlug) {
+      redirect("/generate");
     }
     notFound();
   }
