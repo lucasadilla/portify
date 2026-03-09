@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
 import { getAccessTokenForUser } from "@/lib/session";
 import {
@@ -45,14 +46,14 @@ export default async function PublicPortfolioPage({
 
   const viewerSession = await getServerSession(authOptions);
   const viewerUsername = viewerSession?.user?.username ?? viewerSession?.user?.name ?? null;
-  let portfolio: Awaited<ReturnType<typeof prisma.portfolio.findUnique<{
-    where: { slug: string };
+  type PortfolioWithRelations = Prisma.PortfolioGetPayload<{
     include: {
       user: true;
       timelineEntries: true;
       repos: { include: { artifacts: true } };
     };
-  }>>>;
+  }>;
+  let portfolio: PortfolioWithRelations | null;
   try {
     portfolio = await prisma.portfolio.findUnique({
       where: { slug },
