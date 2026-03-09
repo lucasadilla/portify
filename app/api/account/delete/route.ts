@@ -15,25 +15,40 @@ export async function DELETE() {
 
     const userId = session.user.id;
 
-    await prisma.$transaction(async (tx) => {
-      const portfolio = await tx.portfolio.findUnique({
-        where: { userId },
-        select: { id: true, repos: { select: { id: true } } },
-      });
-
-      if (portfolio) {
-        const repoIds = portfolio.repos.map((r) => r.id);
-        await tx.repoArtifact.deleteMany({ where: { portfolioRepoId: { in: repoIds } } });
-        await tx.job.deleteMany({ where: { portfolioRepoId: { in: repoIds } } });
-        await tx.portfolioRepo.deleteMany({ where: { portfolioId: portfolio.id } });
-        await tx.portfolioTimelineEntry.deleteMany({ where: { portfolioId: portfolio.id } });
-        await tx.portfolio.delete({ where: { id: portfolio.id } });
-      }
-
-      await tx.session.deleteMany({ where: { userId } });
-      await tx.account.deleteMany({ where: { userId } });
-      await tx.user.delete({ where: { id: userId } });
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { id: true },
     });
+    if (!user) {
+      await prisma.session.deleteMany({ where: { userId } });
+      await prisma.account.deleteMany({ where: { userId } });
+      return NextResponse.json({ ok: true });
+    }
+
+    await prisma.$transaction(
+      async (tx) => {
+        const portfolio = await tx.portfolio.findUnique({
+          where: { userId },
+          select: { id: true, repos: { select: { id: true } } },
+        });
+
+        if (portfolio) {
+          const repoIds = portfolio.repos.map((r) => r.id);
+          if (repoIds.length > 0) {
+            await tx.repoArtifact.deleteMany({ where: { portfolioRepoId: { in: repoIds } } });
+            await tx.job.deleteMany({ where: { portfolioRepoId: { in: repoIds } } });
+          }
+          await tx.portfolioRepo.deleteMany({ where: { portfolioId: portfolio.id } });
+          await tx.portfolioTimelineEntry.deleteMany({ where: { portfolioId: portfolio.id } });
+          await tx.portfolio.delete({ where: { id: portfolio.id } });
+        }
+
+        await tx.session.deleteMany({ where: { userId } });
+        await tx.account.deleteMany({ where: { userId } });
+        await tx.user.delete({ where: { id: userId } });
+      },
+      { timeout: 15000 }
+    );
 
     return NextResponse.json({ ok: true });
   } catch (err) {
