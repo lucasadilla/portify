@@ -205,7 +205,7 @@ export default async function PublicPortfolioPage({
     );
     for (const r of langResults) {
       if (r.status === "fulfilled") {
-        for (const [lang, bytes] of Object.entries(r.value)) {
+        for (const [lang, bytes] of Object.entries(r.value) as [string, number][]) {
           langBytes[lang] = (langBytes[lang] ?? 0) + bytes;
         }
       }
