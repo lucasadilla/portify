@@ -1,7 +1,12 @@
+ "use client";
+
 import Link from "next/link";
+import { useSession } from "next-auth/react";
 
 export function Footer() {
   const currentYear = new Date().getFullYear();
+  const { data: session } = useSession();
+  const isSignedIn = !!session?.user;
 
   return (
     <footer className="border-t border-border/40 mt-auto">
@@ -14,9 +19,20 @@ export function Footer() {
             <Link href="/demo" className="hover:text-foreground transition-colors">
               Demo
             </Link>
-            <Link href="/auth/signin" className="hover:text-foreground transition-colors">
-              Sign in
-            </Link>
+            {isSignedIn ? (
+              <>
+                <Link href="/dashboard" className="hover:text-foreground transition-colors">
+                  Dashboard
+                </Link>
+                <Link href="/generate" className="hover:text-foreground transition-colors">
+                  Generate portfolio
+                </Link>
+              </>
+            ) : (
+              <Link href="/auth/signin" className="hover:text-foreground transition-colors">
+                Sign in
+              </Link>
+            )}
           </nav>
         </div>
         <p className="mt-4 text-center sm:text-left text-xs text-muted-foreground">

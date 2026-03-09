@@ -135,61 +135,58 @@ export default function GeneratePage() {
     );
   }
 
-  if (building) {
-    return (
-      <div className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-b from-background via-background to-primary/5">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_50%_at_50%_-20%,rgba(120,80,220,0.15),transparent)]" />
-        <div className="relative z-10 w-full max-w-md px-6 flex flex-col items-center">
-          <div className="flex items-center gap-3 mb-8">
-            <div className="rounded-full bg-primary/10 p-3">
-              <Sparkles className="h-8 w-8 text-primary" />
+  return (
+    <div className="max-w-xl mx-auto flex flex-col items-center text-center gap-8">
+      {building && (
+        <div className="w-full rounded-2xl border border-border bg-card/95 px-5 py-4 text-left shadow-sm">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="rounded-full bg-primary/10 p-2">
+              <Sparkles className="h-5 w-5 text-primary" />
             </div>
-            <div className="text-left">
-              <h1 className="text-2xl font-bold tracking-tight">Building your portfolio</h1>
-              <p className="text-sm text-muted-foreground mt-0.5">
+            <div className="flex-1">
+              <h2 className="text-sm font-semibold">Building your portfolio</h2>
+              <p className="text-xs text-muted-foreground mt-0.5">
                 {currentStepLabel || "Getting started…"}
               </p>
             </div>
           </div>
-          <div className="w-full space-y-2">
-            <Progress value={overallProgress} className="h-3" />
-            <p className="text-center text-sm text-muted-foreground">
+          <div className="space-y-2">
+            <Progress value={overallProgress} className="h-2.5" />
+            <p className="text-[11px] text-muted-foreground">
               {portfolio?.repos
                 ? `${portfolio.repos.filter((r) => r.status === "DONE").length} of ${portfolio.repos.length} projects ready`
                 : "Adding repos…"}
             </p>
           </div>
-          <p className="text-xs text-muted-foreground mt-8 max-w-sm text-center">
-            This usually takes 1–3 minutes. You can leave this page; generation continues in the background.
+          <p className="mt-3 text-[11px] text-muted-foreground">
+            This usually takes 1–3 minutes. You can navigate around Portify while we keep generating in the background.
           </p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="max-w-xl mx-auto flex flex-col items-center text-center">
-      <div className="rounded-full bg-primary/10 p-4 mb-6">
-        <Sparkles className="h-12 w-12 text-primary" />
-      </div>
-      <h1 className="text-3xl font-bold tracking-tight mb-2">Generate your portfolio</h1>
-      <p className="text-muted-foreground mb-8">
-        We’ll add all your public GitHub repos and build summaries and diagrams for each. Add your own screenshots on each project page. You can add or remove projects later from your portfolio page.
-      </p>
-      <Button size="lg" className="gap-2" onClick={handleGenerate}>
-        <Sparkles className="h-5 w-5" />
-        Generate portfolio
-      </Button>
-      {showViewPortfolio && (
-        <div className="mt-8 flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            {hasRepos ? "Your portfolio is ready." : "Add repos from GitHub, then generate to build your portfolio."}
-          </p>
-          <Link href={`/${slug}`}>
-            <Button variant="outline">View my portfolio</Button>
-          </Link>
         </div>
       )}
+
+      <div className="flex flex-col items-center text-center">
+        <div className="rounded-full bg-primary/10 p-4 mb-6">
+          <Sparkles className="h-12 w-12 text-primary" />
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight mb-2">Generate your portfolio</h1>
+        <p className="text-muted-foreground mb-8">
+          We’ll add all your public GitHub repos and build summaries and diagrams for each. Add your own screenshots on each project page. You can add or remove projects later from your portfolio page.
+        </p>
+        <Button size="lg" className="gap-2" onClick={handleGenerate} disabled={building}>
+          <Sparkles className="h-5 w-5" />
+          {building ? "Generating…" : "Generate portfolio"}
+        </Button>
+        {showViewPortfolio && (
+          <div className="mt-8 flex flex-col gap-3">
+            <p className="text-sm text-muted-foreground">
+              {hasRepos ? "Your portfolio is ready." : "Add repos from GitHub, then generate to build your portfolio."}
+            </p>
+            <Link href={`/${slug}`}>
+              <Button variant="outline">View my portfolio</Button>
+            </Link>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
