@@ -1,6 +1,15 @@
 import { prisma } from "../../lib/db";
 import type { JobType, JobStatus } from "@prisma/client";
 
+/** Call on worker startup: mark any repo left PROCESSING by a previous run/crash as FAILED so the UI can retry. */
+export async function resetStaleProcessingRepos(): Promise<number> {
+  const result = await prisma.portfolioRepo.updateMany({
+    where: { status: "PROCESSING" },
+    data: { status: "FAILED" },
+  });
+  return result.count;
+}
+
 export async function upsertJob(
   portfolioRepoId: string,
   type: JobType,

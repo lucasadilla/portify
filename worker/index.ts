@@ -3,7 +3,7 @@ import { config } from "dotenv";
 import path from "path";
 config({ path: path.join(process.cwd(), ".env.local") });
 import { createGenerateWorker, type GenerateJobData } from "../lib/jobQueue";
-import { setRepoStatus, upsertJob } from "./lib/db";
+import { setRepoStatus, upsertJob, resetStaleProcessingRepos } from "./lib/db";
 import { detectStack } from "../lib/stackDetector";
 import { cloneRepo, listFiles, parsePackageJson } from "./jobs/analyze";
 import { runSummary } from "./jobs/summary";
@@ -67,4 +67,13 @@ worker.on("failed", async (job, err) => {
 const redisUrl = process.env.REDIS_URL;
 const redisHost = redisUrl ? new URL(redisUrl).hostname : "localhost";
 console.log("[Portify worker] Redis:", redisHost, redisUrl ? "(Upstash/local)" : "(default localhost)");
-console.log("Portify worker running. Waiting for jobs... (Click Regenerate on a repo in the dashboard to queue one)");
+
+async function start() {
+  const reset = await resetStaleProcessingRepos().catch((e) => {
+    console.error("[Portify worker] Failed to reset stale PROCESSING repos:", e);
+    return 0;
+  });
+  if (reset > 0) console.log("[Portify worker] Reset", reset, "stale PROCESSING repo(s) to FAILED (previous run was interrupted).");
+  console.log("Portify worker running. Waiting for jobs...");
+}
+start();
