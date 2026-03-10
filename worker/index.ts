@@ -8,7 +8,6 @@ import { prisma } from "../lib/db";
 import { detectStack } from "../lib/stackDetector";
 import { cloneRepo, listFiles, parsePackageJson } from "./jobs/analyze";
 import { runSummary } from "./jobs/summary";
-import { runBuild, cleanupBuild } from "./jobs/build";
 import { runDiagram } from "./jobs/diagram";
 
 async function processJob(data: GenerateJobData) {
@@ -26,18 +25,7 @@ async function processJob(data: GenerateJobData) {
     await upsertJob(portfolioRepoId, "analyze", "COMPLETED", 100, null);
 
     await runSummary(portfolioRepoId, repoDir, runPlan);
-    let buildResult: Awaited<ReturnType<typeof runBuild>>;
-    try {
-      buildResult = await runBuild(portfolioRepoId, repoDir, runPlan);
-    } catch {
-      buildResult = { runnable: false };
-    }
-
-    try {
-      await runDiagram(portfolioRepoId, repoDir);
-    } finally {
-      await cleanupBuild(buildResult, runPlan, repoDir);
-    }
+    await runDiagram(portfolioRepoId, repoDir);
 
     await setRepoStatus(portfolioRepoId, "DONE");
   } catch (err) {
