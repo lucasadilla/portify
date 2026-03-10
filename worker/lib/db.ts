@@ -10,6 +10,10 @@ export async function resetStaleProcessingRepos(): Promise<number> {
   return result.count;
 }
 
+function isPrismaP2025(e: unknown): boolean {
+  return !!e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2025";
+}
+
 export async function upsertJob(
   portfolioRepoId: string,
   type: JobType,
@@ -21,14 +25,24 @@ export async function upsertJob(
     where: { portfolioRepoId, type },
   });
   if (existing) {
-    return prisma.job.update({
-      where: { id: existing.id },
-      data: { status, progress, error: error ?? undefined },
-    });
+    try {
+      return await prisma.job.update({
+        where: { id: existing.id },
+        data: { status, progress, error: error ?? undefined },
+      });
+    } catch (e) {
+      if (isPrismaP2025(e)) return null as unknown as Awaited<ReturnType<typeof prisma.job.update>>;
+      throw e;
+    }
   }
-  return prisma.job.create({
-    data: { portfolioRepoId, type, status, progress, error: error ?? undefined },
-  });
+  try {
+    return await prisma.job.create({
+      data: { portfolioRepoId, type, status, progress, error: error ?? undefined },
+    });
+  } catch (e) {
+    if (isPrismaP2025(e)) return null as unknown as Awaited<ReturnType<typeof prisma.job.create>>;
+    throw e;
+  }
 }
 
 export async function setRepoStatus(
@@ -42,9 +56,7 @@ export async function setRepoStatus(
       data: { status, ...updates },
     });
   } catch (e: unknown) {
-    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2025") {
-      return null as unknown as Awaited<ReturnType<typeof prisma.portfolioRepo.update>>;
-    }
+    if (isPrismaP2025(e)) return null as unknown as Awaited<ReturnType<typeof prisma.portfolioRepo.update>>;
     throw e;
   }
 }
