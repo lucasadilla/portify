@@ -106,10 +106,48 @@ export default async function PublicPortfolioPage({
 
   const isOwner = viewerSession?.user?.id === portfolio.userId;
 
-  // Precomputed / DB-only version: do not hit GitHub here.
-  // This keeps the portfolio page fast when navigating back from a project.
-  const evolutionData: { month: string; commits: number }[] = [];
-  const languageData: { name: string; value: number }[] = [];
+  // Precomputed / DB-only graphs: approximate contributions & languages from our own DB only.
+  // This keeps the portfolio page fast without calling GitHub.
+  const evolutionByMonth: Record<string, number> = {};
+  const languageCounts: Record<string, number> = {};
+
+  for (const r of portfolio.repos) {
+    const created = r.createdAt;
+    const dateIso =
+      typeof created === "string"
+        ? created
+        : created instanceof Date
+        ? created.toISOString()
+        : new Date().toISOString();
+    const month = dateIso.slice(0, 7);
+    evolutionByMonth[month] = (evolutionByMonth[month] ?? 0) + 1;
+
+    if (r.detectedStackJson && r.detectedStackJson.trim().length > 0) {
+      try {
+        const stack = JSON.parse(r.detectedStackJson) as string[];
+        for (const tech of stack) {
+          const key = tech.trim();
+          if (!key) continue;
+          languageCounts[key] = (languageCounts[key] ?? 0) + 1;
+        }
+      } catch {
+        // ignore bad JSON
+      }
+    }
+  }
+
+  const evolutionData: { month: string; commits: number }[] = Object.entries(evolutionByMonth)
+    .map(([month, count]) => ({ month, commits: count }))
+    .sort((a, b) => a.month.localeCompare(b.month));
+
+  const totalLang = Object.values(languageCounts).reduce((a, b) => a + b, 0);
+  const languageData: { name: string; value: number }[] =
+    totalLang > 0
+      ? Object.entries(languageCounts)
+          .map(([name, count]) => ({ name, value: Math.round((count / totalLang) * 100) }))
+          .sort((a, b) => b.value - a.value)
+          .slice(0, 10)
+      : [];
   const commitsTimeRange: "all" | "year" = "year";
 
   const developerTimeline: {
