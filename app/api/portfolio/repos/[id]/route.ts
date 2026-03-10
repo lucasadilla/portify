@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
+import { type RepoStatus } from "@prisma/client";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 
@@ -51,7 +52,7 @@ export async function PATCH(
     showLanguagesGraph?: boolean;
     showScreenshots?: boolean;
     showDiagram?: boolean;
-    status?: string;
+    status?: RepoStatus;
   } = {};
   if (customTitle !== undefined) data.customTitle = customTitle;
   if (customSummary !== undefined) data.customSummary = customSummary;
