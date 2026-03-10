@@ -8,10 +8,7 @@ import { generateDiagramPlan } from "../../lib/openai";
 
 export type DiagramKind =
   | "architecture"
-  | "data-flow"
-  | "api-routes"
   | "db-schema"
-  | "dependency-graph"
   | "sequence";
 
 function placeholderSvg(title: string, message: string): Buffer {
@@ -340,14 +337,7 @@ async function storeDiagram(
   });
 }
 
-const DIAGRAM_ORDER: DiagramKind[] = [
-  "architecture",
-  "data-flow",
-  "api-routes",
-  "db-schema",
-  "dependency-graph",
-  "sequence",
-];
+const DIAGRAM_ORDER: DiagramKind[] = ["architecture", "db-schema", "sequence"];
 
 const EMPTY_FACTS: RepoFacts = {
   repoName: "",
@@ -373,44 +363,17 @@ export async function runDiagram(portfolioRepoId: string, repoDir: string): Prom
       !!facts.detected.database ||
       facts.detected.auth.length > 0 ||
       facts.detected.cache.length > 0;
-    const hasDataFlowSignals =
-      (!!facts.detected.frontend && !!facts.detected.backend) ||
-      (!!facts.detected.backend && !!facts.detected.database) ||
-      (!!facts.detected.frontend && !!facts.detected.database);
-    const hasApiRoutes = facts.routeHints.length > 0;
     const hasDbSignals =
       !!facts.detected.database || !!facts.detected.orm || facts.dbHints.length > 0;
 
     if (hasArchitectureSignals) {
       await storeDiagram(portfolioRepoId, "architecture", renderSystemSvg(facts), systemMermaid(facts), facts);
     }
-    if (hasDataFlowSignals) {
-      await storeDiagram(portfolioRepoId, "data-flow", renderDataFlowSvg(facts), systemMermaid(facts), facts);
-    }
-    if (hasApiRoutes) {
-      await storeDiagram(portfolioRepoId, "api-routes", renderApiRoutesSvg(facts), "", facts);
-    }
     if (hasDbSignals) {
       await storeDiagram(portfolioRepoId, "db-schema", renderDbSchemaSvg(facts), "", facts);
     }
     // Always safe to show dependency snapshot; skip only when there are truly no dependencies.
-    const pkgForDeps = parsePackageJson(repoDir);
-    const depsForGraph = pkgForDeps && typeof pkgForDeps === "object"
-      ? {
-          ...(pkgForDeps.dependencies as Record<string, string> | undefined),
-          ...(pkgForDeps.devDependencies as Record<string, string> | undefined),
-        }
-      : {};
-    if (depsForGraph && Object.keys(depsForGraph).length > 0) {
-      await storeDiagram(
-        portfolioRepoId,
-        "dependency-graph",
-        renderDependencyGraphSvg(repoDir, repoName),
-        "",
-        facts
-      );
-    }
-    if (hasArchitectureSignals || hasDataFlowSignals || hasDbSignals) {
+    if (hasArchitectureSignals || hasDbSignals) {
       await storeDiagram(portfolioRepoId, "sequence", renderSequenceSvg(facts), "", facts);
     }
 
