@@ -114,25 +114,10 @@ export default async function PublicPortfolioPage({
 
   const isOwner = viewerSession?.user?.id === portfolio.userId;
 
-  // Accurate GitHub-based graphs, but limited and cached per request to keep things reasonable.
+  // Accurate GitHub-based graphs, but limited and computed on demand.
   let evolutionData: { month: string; commits: number }[] = [];
   let languageData: { name: string; value: number }[] = [];
   let commitsTimeRange: "all" | "year" = "year";
-
-  let developerTimeline: {
-    kind: "account" | "repo" | "custom";
-    id: string;
-    date: string;
-    year: number;
-    title: string;
-    subtitle?: string | null;
-    repoFullName?: string;
-    language?: string | null;
-    stars?: number;
-    hasProjectPage?: boolean;
-    stack?: string[];
-    customKind?: string;
-  }[] = [];
 
   let githubJoinDate: string | null = null;
   let githubLogin: string | null = null;
