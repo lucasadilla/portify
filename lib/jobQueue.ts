@@ -40,11 +40,16 @@ export async function addGenerateJob(data: GenerateJobData): Promise<Job<Generat
   return getQueue().add("generate", data, { jobId: data.portfolioRepoId });
 }
 
+const LOCK_DURATION_MS = 10 * 60 * 1000; // 10 min — jobs can run several minutes (clone, analyze, summary, build, diagram)
+const LOCK_RENEW_MS = 30 * 1000; // renew lock every 30s so job is not marked stalled
+
 export function createGenerateWorker(
   processor: (job: Job<GenerateJobData>) => Promise<void>
 ): Worker<GenerateJobData> {
   return new Worker<GenerateJobData>("portify-generate", processor, {
     connection: getConnection(),
     concurrency: 2,
+    lockDuration: LOCK_DURATION_MS,
+    lockRenewTime: LOCK_RENEW_MS,
   });
 }

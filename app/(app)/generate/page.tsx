@@ -49,6 +49,7 @@ type Phase = "idle" | "preparing" | "building";
 const POLL_INTERVAL_MS = 2000;
 const POLL_INTERVAL_SLOW_MS = 4000;
 const QUEUED_SLOW_AFTER_MS = 20000;
+const PREPARE_TIMEOUT_MS = 50000;
 
 export default function GeneratePage() {
   const router = useRouter();
@@ -91,6 +92,16 @@ export default function GeneratePage() {
       setLoading(false);
     })();
   }, [fetchPortfolio, fetchRepos]);
+
+  // If we stay in "preparing" too long, bail out so the user is not stuck
+  useEffect(() => {
+    if (phase !== "preparing") return;
+    const t = setTimeout(() => {
+      setPrepareError("Preparation is taking too long. Check your connection and try again, or reset stuck repos.");
+      setPhase("idle");
+    }, PREPARE_TIMEOUT_MS);
+    return () => clearTimeout(t);
+  }, [phase]);
 
   // Poll when building: single request per cycle, adaptive interval, retry on failure
   useEffect(() => {
@@ -245,9 +256,8 @@ export default function GeneratePage() {
       }
 
       const final = await fetchPortfolio();
-      if (final?.slug) {
-        setSyncResult({ slug: final.slug, added: idsToGenerate.length });
-      }
+      const slug = (final ?? updated)?.slug ?? "";
+      if (slug) setSyncResult({ slug, added: idsToGenerate.length });
       setPhase("building");
     } catch (e) {
       setPrepareError(e instanceof Error ? e.message : "Something went wrong.");

@@ -57,8 +57,11 @@ const worker = createGenerateWorker(async (job) => {
   }
 });
 
-worker.on("failed", (job, err) => {
+worker.on("failed", async (job, err) => {
   console.error("[Portify worker] Job failed:", job?.data?.repoFullName, err?.message);
+  if (job?.data?.portfolioRepoId) {
+    await setRepoStatus(job.data.portfolioRepoId, "FAILED").catch(() => {});
+  }
 });
 
 const redisUrl = process.env.REDIS_URL;
