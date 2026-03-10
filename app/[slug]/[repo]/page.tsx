@@ -2,8 +2,6 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
-import { getAccessTokenForUser } from "@/lib/session";
-import { getRepoCommitHistory, getRepoLanguages } from "@/lib/github";
 import { ProjectPageView } from "@/app/u/[username]/[repo]/ProjectPageView";
 import {
   getDemoRepoByName,
@@ -96,30 +94,9 @@ export default async function ProjectPage({
 
   if (!repo) notFound();
 
-  const [owner] = repo.repoFullName.split("/");
-  let commitData: { month: string; commits: number }[] = [];
-  let languageData: { name: string; value: number }[] = [];
-  const token = await getAccessTokenForUser(portfolio.userId);
-  if (token && owner) {
-    try {
-      const [activity, langs] = await Promise.all([
-        getRepoCommitHistory(token, owner, repoName),
-        getRepoLanguages(token, owner, repoName),
-      ]);
-      commitData = activity
-        .map((a) => ({ month: a.month, commits: a.count }))
-        .sort((a, b) => a.month.localeCompare(b.month));
-      const total = Object.values(langs).reduce((a, b) => a + b, 0);
-      if (total > 0) {
-        languageData = Object.entries(langs)
-          .map(([name, value]) => ({ name, value: Math.round((value / total) * 100) }))
-          .sort((a, b) => b.value - a.value)
-          .slice(0, 10);
-      }
-    } catch {
-      // use empty if API fails
-    }
-  }
+  // Do not call GitHub here – keep project page fast by relying only on precomputed data.
+  const commitData: { month: string; commits: number }[] = [];
+  const languageData: { name: string; value: number }[] = [];
 
   const stack = repo.detectedStackJson ? (JSON.parse(repo.detectedStackJson) as string[]) : [];
   const screenshots = repo.artifacts
