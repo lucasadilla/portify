@@ -3,14 +3,6 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import type { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/db";
-import { getAccessTokenForUser } from "@/lib/session";
-import {
-  getGitHubUserProfile,
-  getContributionHistoryFromGraphQL,
-  getGitHubRepos,
-  getRepoLanguages,
-} from "@/lib/github";
-import type { GitHubRepo } from "@/lib/github";
 import { PortfolioView } from "@/app/u/[username]/PortfolioView";
 import {
   DEMO_PORTFOLIO,
@@ -114,89 +106,24 @@ export default async function PublicPortfolioPage({
 
   const isOwner = viewerSession?.user?.id === portfolio.userId;
 
-  // Accurate GitHub-based graphs, but limited and computed on demand.
-  let evolutionData: { month: string; commits: number }[] = [];
-  let languageData: { name: string; value: number }[] = [];
-  let commitsTimeRange: "all" | "year" = "year";
+  // Read cached GitHub graphs from DB (precomputed by worker).
+  const evolutionData: { month: string; commits: number }[] =
+    (portfolio as { contributionsJson?: string | null }).contributionsJson
+      ? (JSON.parse((portfolio as { contributionsJson: string }).contributionsJson) as {
+          month: string;
+          commits: number;
+        }[])
+      : [];
 
-  let githubJoinDate: string | null = null;
-  let githubLogin: string | null = null;
-  const githubUsername = portfolio.user.username ?? null;
-  const token = await getAccessTokenForUser(portfolio.userId);
-  console.log("[portfolio] github token present:", !!token, "portfolioUserId:", portfolio.userId);
+  const languageData: { name: string; value: number }[] =
+    (portfolio as { languagesJson?: string | null }).languagesJson
+      ? (JSON.parse((portfolio as { languagesJson: string }).languagesJson) as {
+          name: string;
+          value: number;
+        }[])
+      : [];
 
-  if (token) {
-    try {
-      const profile = await getGitHubUserProfile(token);
-      githubJoinDate = profile.createdAt;
-      githubLogin = profile.login;
-    } catch {
-      githubLogin = githubUsername;
-    }
-
-    const loginForHistory = githubLogin ?? githubUsername;
-    if (loginForHistory) {
-      try {
-        const profileHistory = await getContributionHistoryFromGraphQL(token, loginForHistory);
-        if (profileHistory.length > 0) {
-          evolutionData = profileHistory
-            .map(({ month, count }) => ({ month, commits: count }))
-            .sort((a, b) => a.month.localeCompare(b.month));
-        }
-      } catch {
-        // ignore GraphQL failures
-      }
-    }
-
-    if (evolutionData.length > 0) {
-      const now = new Date();
-      const nowMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
-      const joinMonth = githubJoinDate ? githubJoinDate.slice(0, 7) : null;
-      evolutionData = evolutionData.filter(({ month }) => {
-        if (month > nowMonth) return false;
-        if (joinMonth && month < joinMonth) return false;
-        return true;
-      });
-      commitsTimeRange = "year";
-    }
-
-    let reposForGraphs: GitHubRepo[] = [];
-    try {
-      reposForGraphs = await getGitHubRepos(token);
-    } catch {
-      reposForGraphs = [];
-    }
-
-    const reposSlice = reposForGraphs.slice(0, MAX_REPOS_FOR_GRAPHS);
-    const langBytes: Record<string, number> = {};
-    const langResults = await Promise.allSettled(
-      reposSlice.map(async (repo) => {
-        const [owner, repoName] = repo.fullName.split("/");
-        return owner && repoName ? getRepoLanguages(token, owner, repoName) : {};
-      })
-    );
-    for (const r of langResults) {
-      if (r.status === "fulfilled") {
-        for (const [lang, bytes] of Object.entries(r.value) as [string, number][]) {
-          langBytes[lang] = (langBytes[lang] ?? 0) + bytes;
-        }
-      }
-    }
-    const total = Object.values(langBytes).reduce((a, b) => a + b, 0);
-    if (total > 0) {
-      languageData = Object.entries(langBytes)
-        .map(([name, value]) => ({ name, value: Math.round((value / total) * 100) }))
-        .sort((a, b) => b.value - a.value)
-        .slice(0, 10);
-    }
-  }
-
-  console.log("[portfolio] graphs summary", {
-    slug: portfolio.slug,
-    hasToken: !!token,
-    evolutionPoints: evolutionData.length,
-    languages: languageData.map((l) => l.name),
-  });
+  const commitsTimeRange: "all" | "year" = "year";
 
   // Developer journey: GitHub account + repos + custom entries
   const developerTimeline: {
@@ -213,6 +140,10 @@ export default async function PublicPortfolioPage({
     stack?: string[];
     customKind?: string;
   }[] = [];
+
+  const githubJoinDate =
+    (portfolio as { githubJoinDate?: string | null }).githubJoinDate ?? null;
+  const githubLogin = portfolio.user.username ?? null;
 
   if (githubJoinDate) {
     const joinYear = Number.parseInt(githubJoinDate.slice(0, 4), 10);

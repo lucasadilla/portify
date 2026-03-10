@@ -67,7 +67,7 @@ model Portfolio {
   slug                 String   @unique
   theme                String   @default("dark")
   bio                  String?  @db.Text
-  socialsJson           String?  @db.Text
+  socialsJson          String?  @db.Text
   isPublished          Boolean  @default(false)
   backgroundStyle      String   @default("minimal")
   backgroundOptionsJson String?  @db.Text
@@ -77,6 +77,11 @@ model Portfolio {
   contributionsChartOrderJson String?  @db.Text
   colorPalette         String?  @db.Text
   createdAt            DateTime @default(now())
+
+  // Cached GitHub profile data (computed in worker)
+  contributionsJson    String?  @db.Text  // monthly contributions for account
+  languagesJson        String?  @db.Text  // account-wide language mix
+  githubJoinDate       String?            // ISO created_at from GitHub
 
   user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   repos  PortfolioRepo[]
@@ -114,6 +119,10 @@ model PortfolioRepo {
   status             RepoStatus @default(QUEUED)
   runnable           Boolean?
   createdAt          DateTime  @default(now())
+
+  // Cached GitHub repo data (computed in worker)
+  commitHistoryJson      String? @db.Text // per-repo commits by month
+  languageBreakdownJson  String? @db.Text // per-repo language mix
 
   portfolio Portfolio     @relation(fields: [portfolioId], references: [id], onDelete: Cascade)
   artifacts RepoArtifact[]

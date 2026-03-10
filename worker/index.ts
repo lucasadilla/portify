@@ -9,6 +9,7 @@ import { detectStack } from "../lib/stackDetector";
 import { cloneRepo, listFiles, parsePackageJson } from "./jobs/analyze";
 import { runSummary } from "./jobs/summary";
 import { runDiagram } from "./jobs/diagram";
+import { refreshPortfolioGitHubData, refreshRepoGitHubData } from "./jobs/githubProfile";
 
 async function processJob(data: GenerateJobData) {
   const { portfolioRepoId, repoFullName, branch, accessToken } = data;
@@ -24,7 +25,16 @@ async function processJob(data: GenerateJobData) {
     const runPlan = detectStack(files, pkg ?? undefined);
     await upsertJob(portfolioRepoId, "analyze", "COMPLETED", 100, null);
 
+    const repoRecord = await prisma.portfolioRepo.findUnique({
+      where: { id: portfolioRepoId },
+      include: { portfolio: true },
+    });
+    if (repoRecord?.portfolio) {
+      await refreshPortfolioGitHubData(repoRecord.portfolio.id, repoRecord.portfolio.userId);
+    }
+
     await runSummary(portfolioRepoId, repoDir, runPlan);
+    await refreshRepoGitHubData(portfolioRepoId);
     await runDiagram(portfolioRepoId, repoDir);
 
     await setRepoStatus(portfolioRepoId, "DONE");
