@@ -246,7 +246,7 @@ export default async function PublicPortfolioPage({
       commitsTimeRange={commitsTimeRange}
       developerTimeline={developerTimeline}
       githubJoinDate={githubJoinDate}
-      githubUsername={githubLogin ?? githubUsername}
+      githubUsername={githubLogin}
       viewerUsername={viewerUsername}
       isOwner={isOwner}
     />
