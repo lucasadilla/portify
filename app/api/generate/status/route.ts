@@ -22,20 +22,16 @@ export async function GET() {
 
   if (!portfolio) return Response.json({ portfolio: null, activeJob: null });
 
-  const payload: {
-    portfolio: typeof portfolio & { socialsJson?: Record<string, unknown> };
-    activeJob: {
-      repoFullName: string;
-      status: string;
-      jobs: { type: string; status: string; progress: number }[];
-    } | null;
-  } = {
-    portfolio: {
-      ...portfolio,
-      socialsJson: portfolio.socialsJson ? (JSON.parse(portfolio.socialsJson) as Record<string, unknown>) : {},
-    },
-    activeJob: null,
+  const portfolioData = {
+    ...portfolio,
+    socialsJson: portfolio.socialsJson ? JSON.parse(portfolio.socialsJson) : {},
   };
+
+  let activeJob: {
+    repoFullName: string;
+    status: string;
+    jobs: { type: string; status: string; progress: number }[];
+  } | null = null;
 
   const pending = portfolio.repos.find(
     (r) => r.status === "QUEUED" || r.status === "PROCESSING"
@@ -46,7 +42,7 @@ export async function GET() {
       include: { jobs: true },
     });
     if (withJobs) {
-      payload.activeJob = {
+      activeJob = {
         repoFullName: withJobs.repoFullName,
         status: withJobs.status,
         jobs: withJobs.jobs.map((j) => ({ type: j.type, status: j.status, progress: j.progress })),
@@ -54,5 +50,5 @@ export async function GET() {
     }
   }
 
-  return Response.json(payload);
+  return Response.json({ portfolio: portfolioData, activeJob });
 }
