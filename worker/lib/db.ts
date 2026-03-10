@@ -36,8 +36,15 @@ export async function setRepoStatus(
   status: "QUEUED" | "PROCESSING" | "DONE" | "FAILED",
   updates?: { customSummary?: string; detectedStackJson?: string; runnable?: boolean }
 ) {
-  return prisma.portfolioRepo.update({
-    where: { id: portfolioRepoId },
-    data: { status, ...updates },
-  });
+  try {
+    return await prisma.portfolioRepo.update({
+      where: { id: portfolioRepoId },
+      data: { status, ...updates },
+    });
+  } catch (e: unknown) {
+    if (e && typeof e === "object" && "code" in e && (e as { code: string }).code === "P2025") {
+      return null as unknown as Awaited<ReturnType<typeof prisma.portfolioRepo.update>>;
+    }
+    throw e;
+  }
 }
