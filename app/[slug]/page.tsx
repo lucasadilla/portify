@@ -157,11 +157,15 @@ export default async function PublicPortfolioPage({
         subtitle: githubLogin ? `Created @${githubLogin}` : null,
       });
     }
-    // Trim contributions graph so it starts at GitHub join month
+    // Trim contributions graph so it starts at GitHub join month and never goes past current month
     const joinMonth = githubJoinDate.slice(0, 7);
-    if (joinMonth) {
-      evolutionData = evolutionData.filter(({ month }) => month >= joinMonth);
-    }
+    const now = new Date();
+    const nowMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, "0")}`;
+    evolutionData = evolutionData.filter(({ month }) => {
+      if (joinMonth && month < joinMonth) return false;
+      if (month > nowMonth) return false;
+      return true;
+    });
   }
 
   // Basic repo-based timeline items from our own DB
