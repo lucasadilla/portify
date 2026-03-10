@@ -123,6 +123,8 @@ export default async function PublicPortfolioPage({
         }[])
       : [];
 
+  const commitsTimeRange: "all" | "year" = "year";
+
   // Developer journey: GitHub account + repos + custom entries
   const developerTimeline: {
     kind: "account" | "repo" | "custom";
