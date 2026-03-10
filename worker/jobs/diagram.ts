@@ -4,6 +4,7 @@ import { s3, uploadBuffer } from "../../lib/s3";
 import { upsertJob } from "../lib/db";
 import { extractRepoFacts, type RepoFacts } from "../lib/repoFacts";
 import { parsePackageJson } from "./analyze";
+import { generateDiagramPlan } from "../../lib/openai";
 
 export type DiagramKind =
   | "architecture"
@@ -321,13 +322,20 @@ async function storeDiagram(
     url = `data:image/svg+xml;base64,${svg.toString("base64")}`;
   }
   const sortOrder = DIAGRAM_ORDER.indexOf(kind);
+  const diagramPlan = await generateDiagramPlan({ repoName: facts.repoName, facts });
   await prisma.repoArtifact.create({
     data: {
       portfolioRepoId,
       type: "diagram",
       url,
       sortOrder: sortOrder >= 0 ? sortOrder : 0,
-      metadata: JSON.stringify({ diagramKind: kind, kind, mermaid, facts: { ...facts, folders: facts.folders.slice(0, 20) } }),
+      metadata: JSON.stringify({
+        diagramKind: kind,
+        kind,
+        mermaid,
+        facts: { ...facts, folders: facts.folders.slice(0, 20) },
+        plan: diagramPlan?.[kind],
+      }),
     },
   });
 }
@@ -357,18 +365,54 @@ export async function runDiagram(portfolioRepoId: string, repoDir: string): Prom
     const facts = await extractRepoFacts(repoDir);
     facts.repoName = repoName;
 
-    await storeDiagram(portfolioRepoId, "architecture", renderSystemSvg(facts), systemMermaid(facts), facts);
-    await storeDiagram(portfolioRepoId, "data-flow", renderDataFlowSvg(facts), systemMermaid(facts), facts);
-    await storeDiagram(portfolioRepoId, "api-routes", renderApiRoutesSvg(facts), "", facts);
-    await storeDiagram(portfolioRepoId, "db-schema", renderDbSchemaSvg(facts), "", facts);
-    await storeDiagram(
-      portfolioRepoId,
-      "dependency-graph",
-      renderDependencyGraphSvg(repoDir, repoName),
-      "",
-      facts
-    );
-    await storeDiagram(portfolioRepoId, "sequence", renderSequenceSvg(facts), "", facts);
+    const plan = await generateDiagramPlan({ repoName, facts });
+
+    const hasArchitectureSignals =
+      !!facts.detected.frontend ||
+      !!facts.detected.backend ||
+      !!facts.detected.database ||
+      facts.detected.auth.length > 0 ||
+      facts.detected.cache.length > 0;
+    const hasDataFlowSignals =
+      (!!facts.detected.frontend && !!facts.detected.backend) ||
+      (!!facts.detected.backend && !!facts.detected.database) ||
+      (!!facts.detected.frontend && !!facts.detected.database);
+    const hasApiRoutes = facts.routeHints.length > 0;
+    const hasDbSignals =
+      !!facts.detected.database || !!facts.detected.orm || facts.dbHints.length > 0;
+
+    if (hasArchitectureSignals) {
+      await storeDiagram(portfolioRepoId, "architecture", renderSystemSvg(facts), systemMermaid(facts), facts);
+    }
+    if (hasDataFlowSignals) {
+      await storeDiagram(portfolioRepoId, "data-flow", renderDataFlowSvg(facts), systemMermaid(facts), facts);
+    }
+    if (hasApiRoutes) {
+      await storeDiagram(portfolioRepoId, "api-routes", renderApiRoutesSvg(facts), "", facts);
+    }
+    if (hasDbSignals) {
+      await storeDiagram(portfolioRepoId, "db-schema", renderDbSchemaSvg(facts), "", facts);
+    }
+    // Always safe to show dependency snapshot; skip only when there are truly no dependencies.
+    const pkgForDeps = parsePackageJson(repoDir);
+    const depsForGraph = pkgForDeps && typeof pkgForDeps === "object"
+      ? {
+          ...(pkgForDeps.dependencies as Record<string, string> | undefined),
+          ...(pkgForDeps.devDependencies as Record<string, string> | undefined),
+        }
+      : {};
+    if (depsForGraph && Object.keys(depsForGraph).length > 0) {
+      await storeDiagram(
+        portfolioRepoId,
+        "dependency-graph",
+        renderDependencyGraphSvg(repoDir, repoName),
+        "",
+        facts
+      );
+    }
+    if (hasArchitectureSignals || hasDataFlowSignals || hasDbSignals) {
+      await storeDiagram(portfolioRepoId, "sequence", renderSequenceSvg(facts), "", facts);
+    }
 
     await upsertJob(portfolioRepoId, "diagram", "COMPLETED", 100, null);
   } catch (err) {
