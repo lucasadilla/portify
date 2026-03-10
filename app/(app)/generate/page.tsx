@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -46,7 +46,9 @@ type GitHubRepo = {
 
 type Phase = "idle" | "preparing" | "building";
 
-const POLL_INTERVAL_MS = 1500;
+const POLL_INTERVAL_MS = 2000;
+const POLL_INTERVAL_SLOW_MS = 4000;
+const QUEUED_SLOW_AFTER_MS = 20000;
 
 export default function GeneratePage() {
   const router = useRouter();
@@ -61,6 +63,8 @@ export default function GeneratePage() {
   const [overallProgress, setOverallProgress] = useState(0);
   const [currentRepoName, setCurrentRepoName] = useState<string | null>(null);
   const [currentStepLabel, setCurrentStepLabel] = useState<string>("");
+  const [connectionIssue, setConnectionIssue] = useState(false);
+  const lastQueuedAtRef = useRef<number | null>(null);
 
   const fetchPortfolio = useCallback(async (): Promise<Portfolio | null> => {
     try {
@@ -88,41 +92,80 @@ export default function GeneratePage() {
     })();
   }, [fetchPortfolio, fetchRepos]);
 
-  // Poll when building: faster interval, clear current-repo + step
+  // Poll when building: single request per cycle, adaptive interval, retry on failure
   useEffect(() => {
     if (phase !== "building") return;
 
-    const poll = async () => {
-      const latest = await fetchPortfolio();
-      if (!latest?.repos?.length) return;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let mounted = true;
 
-      const total = latest.repos.length;
-      const done = latest.repos.filter((r: Repo) => r.status === "DONE").length;
-      const failed = latest.repos.filter((r: Repo) => r.status === "FAILED").length;
-      const pending = latest.repos.filter(
-        (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
-      );
+    const poll = async (isRetry = false) => {
+      if (!mounted) return;
+      try {
+        const res = await fetch("/api/generate/status");
+        if (!mounted) return;
+        if (!res.ok) throw new Error("status not ok");
+        const data = await res.json();
+        setConnectionIssue(false);
 
-      setOverallProgress(total ? Math.round(((done + failed) / total) * 100) : 0);
+        const portfolioData = data.portfolio ?? null;
+        if (portfolioData?.repos) setPortfolio(portfolioData);
 
-      if (pending.length === 0) {
-        setPhase("idle");
-        setCurrentRepoName(null);
-        setCurrentStepLabel("");
-        return;
+        const repos = portfolioData?.repos ?? [];
+        const total = repos.length;
+        const done = repos.filter((r: Repo) => r.status === "DONE").length;
+        const failed = repos.filter((r: Repo) => r.status === "FAILED").length;
+        const pending = repos.filter(
+          (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
+        );
+
+        setOverallProgress(total ? Math.round(((done + failed) / total) * 100) : 0);
+
+        if (pending.length === 0) {
+          lastQueuedAtRef.current = null;
+          setPhase("idle");
+          setCurrentRepoName(null);
+          setCurrentStepLabel("");
+          return;
+        }
+
+        const first = pending[0];
+        setCurrentRepoName(first.repoFullName);
+
+        if (first.status === "QUEUED") {
+          if (lastQueuedAtRef.current === null) lastQueuedAtRef.current = Date.now();
+        } else {
+          lastQueuedAtRef.current = null;
+        }
+
+        const activeJob = data.activeJob ?? null;
+        const status = activeJob?.status ?? first.status;
+        const jobs = activeJob?.jobs ?? [];
+        const { stepLabel } = jobProgress(status, jobs);
+        setCurrentStepLabel(stepLabel);
+
+        const now = Date.now();
+        const queuedDuration = lastQueuedAtRef.current ? now - lastQueuedAtRef.current : 0;
+        const interval =
+          queuedDuration >= QUEUED_SLOW_AFTER_MS ? POLL_INTERVAL_SLOW_MS : POLL_INTERVAL_MS;
+        timeoutId = setTimeout(() => poll(), interval);
+      } catch {
+        if (!mounted) return;
+        setConnectionIssue(true);
+        if (!isRetry) {
+          timeoutId = setTimeout(() => poll(true), 1000);
+        } else {
+          timeoutId = setTimeout(() => poll(false), POLL_INTERVAL_MS);
+        }
       }
-
-      const first = pending[0];
-      setCurrentRepoName(first.repoFullName);
-      const res = await fetch(`/api/job-status?id=${first.id}`).then((r) => r.json()).catch(() => ({}));
-      const { stepLabel } = jobProgress(res.status ?? first.status, res.jobs ?? []);
-      setCurrentStepLabel(stepLabel);
     };
 
     poll();
-    const t = setInterval(poll, POLL_INTERVAL_MS);
-    return () => clearInterval(t);
-  }, [phase, fetchPortfolio]);
+    return () => {
+      mounted = false;
+      clearTimeout(timeoutId);
+    };
+  }, [phase]);
 
   // When we leave building and all repos are done/failed, redirect
   useEffect(() => {
@@ -143,6 +186,7 @@ export default function GeneratePage() {
 
     setPhase("preparing");
     setPrepareError(null);
+    setConnectionIssue(false);
     setSyncResult(null);
     setOverallProgress(0);
     setPrepareLabel("Adding repos…");
@@ -279,6 +323,11 @@ export default function GeneratePage() {
               <p className="mt-3 text-[11px] text-muted-foreground">
                 Usually 1–3 min. You can leave this page; we’ll keep generating.
               </p>
+              {connectionIssue && (
+                <p className="mt-2 text-[11px] text-amber-600 dark:text-amber-400">
+                  Connection issue, retrying…
+                </p>
+              )}
               {hasStuck && (
                 <Button
                   type="button"
