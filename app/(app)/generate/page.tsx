@@ -5,25 +5,25 @@ import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
-import { Loader2, Sparkles } from "lucide-react";
+import { Loader2, Sparkles, AlertCircle } from "lucide-react";
 
 const JOB_STEPS = ["analyze", "summary", "build", "diagram"] as const;
 const STEP_LABELS: Record<string, string> = {
   analyze: "Cloning & analyzing repo",
   summary: "Generating AI summary",
   build: "Preparing build",
-  diagram: "Creating diagrams (architecture, data flow, API routes, …)",
+  diagram: "Creating diagrams (architecture, data flow, API routes)",
 };
 
 function jobProgress(
   repoStatus: string,
   jobs: { type: string; status: string; progress: number }[]
 ): { progress: number; stepLabel: string } {
-  if (repoStatus === "QUEUED" && !jobs?.length) return { progress: 0, stepLabel: "Queued, waiting for worker…" };
+  if (repoStatus === "QUEUED" && !jobs?.length) return { progress: 0, stepLabel: "Waiting for worker…" };
   if (!jobs?.length) return { progress: 0, stepLabel: "Starting…" };
   const completed = jobs.filter((j) => j.status === "COMPLETED").length;
   const active = jobs.find((j) => j.status === "ACTIVE");
-  const stepLabel = active ? STEP_LABELS[active.type] ?? active.type : completed >= JOB_STEPS.length ? "Done" : "Starting…";
+  const stepLabel = active ? STEP_LABELS[active.type] ?? active.type : completed >= JOB_STEPS.length ? "Finishing…" : "Starting…";
   const pctPerStep = 100 / JOB_STEPS.length;
   const progress = active ? completed * pctPerStep + (active.progress / 100) * pctPerStep : completed * pctPerStep;
   return { progress: Math.round(progress), stepLabel };
@@ -44,23 +44,33 @@ type GitHubRepo = {
   pushedAt: string;
 };
 
+type Phase = "idle" | "preparing" | "building";
+
+const POLL_INTERVAL_MS = 1500;
+
 export default function GeneratePage() {
   const router = useRouter();
   const [portfolio, setPortfolio] = useState<Portfolio | null>(null);
   const [repos, setRepos] = useState<GitHubRepo[]>([]);
   const [selectedRepoFullNames, setSelectedRepoFullNames] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
-  const [building, setBuilding] = useState(false);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [prepareLabel, setPrepareLabel] = useState("");
+  const [prepareError, setPrepareError] = useState<string | null>(null);
   const [syncResult, setSyncResult] = useState<{ slug: string; added: number } | null>(null);
   const [overallProgress, setOverallProgress] = useState(0);
+  const [currentRepoName, setCurrentRepoName] = useState<string | null>(null);
   const [currentStepLabel, setCurrentStepLabel] = useState<string>("");
-  const [activeJobStatus, setActiveJobStatus] = useState<{ progress: number; stepLabel: string } | null>(null);
 
-  const fetchPortfolio = useCallback(async () => {
-    const res = await fetch("/api/portfolio/repos");
-    const data = await res.json();
-    if (data.portfolio) setPortfolio(data.portfolio);
-    return data.portfolio;
+  const fetchPortfolio = useCallback(async (): Promise<Portfolio | null> => {
+    try {
+      const res = await fetch("/api/portfolio/repos");
+      const data = await res.json();
+      if (data.portfolio) setPortfolio(data.portfolio);
+      return data.portfolio ?? null;
+    } catch {
+      return null;
+    }
   }, []);
 
   const fetchRepos = useCallback(async () => {
@@ -78,78 +88,85 @@ export default function GeneratePage() {
     })();
   }, [fetchPortfolio, fetchRepos]);
 
-  // Poll when building: aggregate progress and pick one active job for step label
+  // Poll when building: faster interval, clear current-repo + step
   useEffect(() => {
-    if (!building) return;
-    const t = setInterval(async () => {
+    if (phase !== "building") return;
+
+    const poll = async () => {
       const latest = await fetchPortfolio();
       if (!latest?.repos?.length) return;
+
       const total = latest.repos.length;
       const done = latest.repos.filter((r: Repo) => r.status === "DONE").length;
       const failed = latest.repos.filter((r: Repo) => r.status === "FAILED").length;
       const pending = latest.repos.filter(
         (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
       );
+
       setOverallProgress(total ? Math.round(((done + failed) / total) * 100) : 0);
 
       if (pending.length === 0) {
+        setPhase("idle");
+        setCurrentRepoName(null);
         setCurrentStepLabel("");
-        setActiveJobStatus(null);
-        setBuilding(false);
         return;
       }
 
-      const firstPendingId = pending[0].id;
-      const res = await fetch(`/api/job-status?id=${firstPendingId}`).then((x) => x.json());
-      const { progress, stepLabel } = jobProgress(res.status, res.jobs ?? []);
+      const first = pending[0];
+      setCurrentRepoName(first.repoFullName);
+      const res = await fetch(`/api/job-status?id=${first.id}`).then((r) => r.json()).catch(() => ({}));
+      const { stepLabel } = jobProgress(res.status ?? first.status, res.jobs ?? []);
       setCurrentStepLabel(stepLabel);
-      setActiveJobStatus({ progress, stepLabel });
-    }, 2000);
+    };
 
+    poll();
+    const t = setInterval(poll, POLL_INTERVAL_MS);
     return () => clearInterval(t);
-  }, [building, fetchPortfolio]);
+  }, [phase, fetchPortfolio]);
 
-  // When building finishes (all repos DONE or FAILED), redirect after a short delay
+  // When we leave building and all repos are done/failed, redirect
   useEffect(() => {
-    if (building || !portfolio?.repos?.length || !syncResult?.slug) return;
+    if (phase !== "idle" || !portfolio?.repos?.length || !syncResult?.slug) return;
     const total = portfolio.repos.length;
     const done = portfolio.repos.filter((r) => r.status === "DONE").length;
     const failed = portfolio.repos.filter((r) => r.status === "FAILED").length;
     if (done + failed < total) return;
-    const t = setTimeout(() => router.push(`/${syncResult.slug}`), 1500);
+    const t = setTimeout(() => router.push(`/${syncResult.slug}`), 1200);
     return () => clearTimeout(t);
-  }, [building, portfolio, syncResult, router]);
+  }, [phase, portfolio, syncResult, router]);
 
   async function handleGenerate() {
     if (selectedRepoFullNames.size === 0) {
-      setCurrentStepLabel("Select at least one repo to generate.");
+      setPrepareError("Select at least one repo.");
       return;
     }
 
-    setBuilding(true);
+    setPhase("preparing");
+    setPrepareError(null);
     setSyncResult(null);
     setOverallProgress(0);
-    setCurrentStepLabel("Adding selected repos…");
+    setPrepareLabel("Adding repos…");
 
     try {
-      const addedIds: string[] = [];
+      const toAdd = Array.from(selectedRepoFullNames)
+        .map((fullName) => repos.find((r) => r.fullName === fullName))
+        .filter(Boolean) as GitHubRepo[];
 
-      for (const fullName of selectedRepoFullNames) {
-        const repo = repos.find((r) => r.fullName === fullName);
-        if (!repo) continue;
-        const res = await fetch("/api/portfolio/repos", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ repoFullName: repo.fullName, branch: repo.defaultBranch }),
-        });
-        const data = await res.json();
-        if (res.ok && data.repo?.id) {
-          addedIds.push(data.repo.id as string);
-        }
-      }
+      const addResults = await Promise.all(
+        toAdd.map((repo) =>
+          fetch("/api/portfolio/repos", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ repoFullName: repo.fullName, branch: repo.defaultBranch }),
+          }).then(async (res) => ({ res, data: await res.json() }))
+        )
+      );
+
+      const addedIds: string[] = addResults
+        .filter(({ res, data }) => res.ok && data.repo?.id)
+        .map(({ data }) => data.repo.id);
 
       const updated = await fetchPortfolio();
-      // Queue jobs for every selected repo that's in the portfolio (by name match)
       const idsToGenerate =
         addedIds.length > 0
           ? addedIds
@@ -158,32 +175,39 @@ export default function GeneratePage() {
               .map((r: Repo) => r.id);
 
       if (idsToGenerate.length === 0) {
-        setCurrentStepLabel("No repos to generate. Add or select repos first.");
-        setBuilding(false);
+        setPrepareError("No repos to generate. Add or select repos first.");
+        setPhase("idle");
         return;
       }
 
-      setCurrentStepLabel("Queuing jobs for selected repos…");
+      setPrepareLabel("Queuing jobs…");
 
-      for (const id of idsToGenerate) {
-        const res = await fetch("/api/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ portfolioRepoId: id }),
-        });
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          console.error("[generate] /api/generate failed", id, res.status, err);
-        }
+      const queueResults = await Promise.all(
+        idsToGenerate.map((id) =>
+          fetch("/api/generate", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ portfolioRepoId: id }),
+          }).then((res) => ({ res, id }))
+        )
+      );
+
+      const queued = queueResults.filter((r) => r.res.ok).length;
+      const failed = queueResults.filter((r) => !r.res.ok).length;
+      if (failed > 0 && queued === 0) {
+        setPrepareError("Failed to queue jobs. Try again or reset stuck repos.");
+        setPhase("idle");
+        return;
       }
 
       const final = await fetchPortfolio();
       if (final?.slug) {
         setSyncResult({ slug: final.slug, added: idsToGenerate.length });
       }
+      setPhase("building");
     } catch (e) {
-      setCurrentStepLabel(e instanceof Error ? e.message : "Something went wrong.");
-      setBuilding(false);
+      setPrepareError(e instanceof Error ? e.message : "Something went wrong.");
+      setPhase("idle");
     }
   }
 
@@ -191,6 +215,8 @@ export default function GeneratePage() {
   const allDone = hasRepos && portfolio.repos.every((r) => r.status === "DONE" || r.status === "FAILED");
   const slug = portfolio?.slug ?? syncResult?.slug;
   const showViewPortfolio = slug && (allDone || !hasRepos);
+  const isBusy = phase !== "idle";
+  const hasStuck = portfolio?.repos?.some((r) => r.status === "QUEUED" || r.status === "PROCESSING");
 
   if (loading) {
     return (
@@ -203,52 +229,82 @@ export default function GeneratePage() {
 
   return (
     <div className="max-w-4xl mx-auto flex flex-col items-center text-center gap-10">
-      {building && (
+      {prepareError && (
+        <div className="w-full flex items-center gap-2 rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-left text-sm text-destructive">
+          <AlertCircle className="h-4 w-4 shrink-0" />
+          <span>{prepareError}</span>
+          <button
+            type="button"
+            className="ml-auto text-xs underline underline-offset-2 hover:no-underline"
+            onClick={() => setPrepareError(null)}
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {(phase === "preparing" || phase === "building") && (
         <div className="w-full rounded-2xl border border-border bg-card/95 px-5 py-4 text-left shadow-sm">
           <div className="flex items-start gap-3 mb-4">
             <div className="rounded-full bg-primary/10 p-2">
-              <Sparkles className="h-5 w-5 text-primary" />
+              {phase === "preparing" ? (
+                <Loader2 className="h-5 w-5 animate-spin text-primary" />
+              ) : (
+                <Sparkles className="h-5 w-5 text-primary" />
+              )}
             </div>
-            <div className="flex-1">
-              <h2 className="text-sm font-semibold">Building your portfolio</h2>
-              <p className="text-xs text-muted-foreground mt-0.5">
-                {currentStepLabel || "Getting started…"}
+            <div className="flex-1 min-w-0">
+              <h2 className="text-sm font-semibold">
+                {phase === "preparing" ? "Preparing" : "Building your portfolio"}
+              </h2>
+              <p className="text-xs text-muted-foreground mt-0.5 truncate">
+                {phase === "preparing"
+                  ? prepareLabel
+                  : currentRepoName
+                    ? `${currentRepoName} — ${currentStepLabel || "…"}`
+                    : currentStepLabel || "Starting…"}
               </p>
             </div>
           </div>
-          <div className="space-y-2">
-            <Progress value={overallProgress} className="h-2.5" />
-            <p className="text-[11px] text-muted-foreground">
-              {portfolio?.repos
-                ? `${portfolio.repos.filter((r) => r.status === "DONE").length} of ${portfolio.repos.length} projects ready`
-                : "Adding repos…"}
-            </p>
-          </div>
-          <p className="mt-3 text-[11px] text-muted-foreground">
-            This usually takes 1–3 minutes. You can navigate around Portify while we keep generating in the background.
-          </p>
-          {portfolio?.repos?.some(
-            (r) => r.status === "QUEUED" || r.status === "PROCESSING"
-          ) && (
-            <button
-              type="button"
-              className="mt-3 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
-              onClick={async () => {
-                const stuck = (portfolio?.repos ?? []).filter(
-                  (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
-                );
-                for (const r of stuck) {
-                  await fetch(`/api/portfolio/repos/${r.id}`, {
-                    method: "PATCH",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ reset: true }),
-                  });
-                }
-                await fetchPortfolio();
-              }}
-            >
-              Reset stuck repos
-            </button>
+          {phase === "building" && (
+            <>
+              <div className="space-y-2">
+                <Progress value={overallProgress} className="h-2.5" />
+                <p className="text-[11px] text-muted-foreground">
+                  {portfolio?.repos
+                    ? `${portfolio.repos.filter((r) => r.status === "DONE").length} of ${portfolio.repos.length} projects ready`
+                    : "…"}
+                </p>
+              </div>
+              <p className="mt-3 text-[11px] text-muted-foreground">
+                Usually 1–3 min. You can leave this page; we’ll keep generating.
+              </p>
+              {hasStuck && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="mt-3"
+                  onClick={async () => {
+                    const stuck = (portfolio?.repos ?? []).filter(
+                      (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
+                    );
+                    await Promise.all(
+                      stuck.map((r) =>
+                        fetch(`/api/portfolio/repos/${r.id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ reset: true }),
+                        })
+                      )
+                    );
+                    await fetchPortfolio();
+                  }}
+                >
+                  Reset stuck repos
+                </Button>
+              )}
+            </>
           )}
         </div>
       )}
@@ -261,9 +317,9 @@ export default function GeneratePage() {
         <p className="text-muted-foreground mb-6 max-w-2xl">
           Pick the GitHub repos you actually want to showcase. We&apos;ll generate summaries, diagrams, and graphs for the ones you select.
         </p>
-        <Button size="lg" className="gap-2 mb-4" onClick={handleGenerate} disabled={building}>
+        <Button size="lg" className="gap-2 mb-4" onClick={handleGenerate} disabled={isBusy}>
           <Sparkles className="h-5 w-5" />
-          {building ? "Generating…" : "Generate portfolio"}
+          {phase === "preparing" ? "Preparing…" : phase === "building" ? "Building…" : "Generate portfolio"}
         </Button>
         {showViewPortfolio && (
           <div className="mt-4 flex flex-col gap-3">
