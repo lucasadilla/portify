@@ -29,6 +29,7 @@ export async function PATCH(
     showLanguagesGraph,
     showScreenshots,
     showDiagram,
+    reset,
   } = body as {
     customTitle?: string;
     customSummary?: string;
@@ -38,6 +39,7 @@ export async function PATCH(
     showLanguagesGraph?: boolean;
     showScreenshots?: boolean;
     showDiagram?: boolean;
+    reset?: boolean;
   };
 
   const data: {
@@ -49,6 +51,7 @@ export async function PATCH(
     showLanguagesGraph?: boolean;
     showScreenshots?: boolean;
     showDiagram?: boolean;
+    status?: string;
   } = {};
   if (customTitle !== undefined) data.customTitle = customTitle;
   if (customSummary !== undefined) data.customSummary = customSummary;
@@ -58,6 +61,10 @@ export async function PATCH(
   if (showLanguagesGraph !== undefined) data.showLanguagesGraph = showLanguagesGraph;
   if (showScreenshots !== undefined) data.showScreenshots = showScreenshots;
   if (showDiagram !== undefined) data.showDiagram = showDiagram;
+  // Reset stuck repo (QUEUED or PROCESSING) so the UI stops polling
+  if (reset && (repo.status === "QUEUED" || repo.status === "PROCESSING")) {
+    data.status = "DONE";
+  }
 
   const updated = await prisma.portfolioRepo.update({
     where: { id },

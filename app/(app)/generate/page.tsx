@@ -227,6 +227,29 @@ export default function GeneratePage() {
           <p className="mt-3 text-[11px] text-muted-foreground">
             This usually takes 1–3 minutes. You can navigate around Portify while we keep generating in the background.
           </p>
+          {portfolio?.repos?.some(
+            (r) => r.status === "QUEUED" || r.status === "PROCESSING"
+          ) && (
+            <button
+              type="button"
+              className="mt-3 text-[11px] text-muted-foreground hover:text-foreground underline underline-offset-2"
+              onClick={async () => {
+                const stuck = (portfolio?.repos ?? []).filter(
+                  (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
+                );
+                for (const r of stuck) {
+                  await fetch(`/api/portfolio/repos/${r.id}`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ reset: true }),
+                  });
+                }
+                await fetchPortfolio();
+              }}
+            >
+              Reset stuck repos
+            </button>
+          )}
         </div>
       )}
 
