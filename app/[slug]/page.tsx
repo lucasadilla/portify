@@ -121,6 +121,7 @@ export default async function PublicPortfolioPage({
 
   let githubJoinDate: string | null = null;
   let githubLogin: string | null = null;
+  const githubUsername = portfolio.user.username ?? null;
   const token = await getAccessTokenForUser(portfolio.userId);
   console.log("[portfolio] github token present:", !!token, "portfolioUserId:", portfolio.userId);
 
