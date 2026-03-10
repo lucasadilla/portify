@@ -139,6 +139,8 @@ export default async function PublicPortfolioPage({
   const token = await getAccessTokenForUser(portfolio.userId);
   const githubUsername = portfolio.user.username ?? null;
 
+  console.log("[portfolio] github token present:", !!token, "portfolioUserId:", portfolio.userId);
+
   if (token) {
     try {
       const profile = await getGitHubUserProfile(token);
@@ -204,6 +206,13 @@ export default async function PublicPortfolioPage({
         .slice(0, 10);
     }
   }
+
+  console.log("[portfolio] graphs summary", {
+    slug: portfolio.slug,
+    hasToken: !!token,
+    evolutionPoints: evolutionData.length,
+    languages: languageData.map((l) => l.name),
+  });
 
   // Developer journey: GitHub account + repos + custom entries
   const developerTimeline: {
