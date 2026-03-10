@@ -32,6 +32,7 @@ export async function POST(req: NextRequest) {
   await prisma.job.deleteMany({ where: { portfolioRepoId } });
 
   try {
+    const redisHost = process.env.REDIS_URL ? new URL(process.env.REDIS_URL).hostname : "none";
     const job = await addGenerateJob({
       portfolioRepoId: repo.id,
       portfolioId: repo.portfolioId,
@@ -39,6 +40,7 @@ export async function POST(req: NextRequest) {
       branch: repo.branch,
       accessToken: token,
     });
+    console.log("[api/generate] Job queued:", repo.repoFullName, "redis:", redisHost);
     return NextResponse.json({ jobId: job.id, portfolioRepoId });
   } catch (e) {
     await prisma.portfolioRepo.update({

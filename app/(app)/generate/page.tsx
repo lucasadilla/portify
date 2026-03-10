@@ -148,27 +148,38 @@ export default function GeneratePage() {
         }
       }
 
-      await fetchPortfolio();
+      const updated = await fetchPortfolio();
+      // Queue jobs for every selected repo that's in the portfolio (by name match)
+      const idsToGenerate =
+        addedIds.length > 0
+          ? addedIds
+          : (updated?.repos ?? [])
+              .filter((r: Repo) => selectedRepoFullNames.has(r.repoFullName))
+              .map((r: Repo) => r.id);
 
-      if (addedIds.length === 0) {
-        setCurrentStepLabel("No new repos were added.");
+      if (idsToGenerate.length === 0) {
+        setCurrentStepLabel("No repos to generate. Add or select repos first.");
         setBuilding(false);
         return;
       }
 
       setCurrentStepLabel("Queuing jobs for selected repos…");
 
-      for (const id of addedIds) {
-        await fetch("/api/generate", {
+      for (const id of idsToGenerate) {
+        const res = await fetch("/api/generate", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ portfolioRepoId: id }),
         });
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          console.error("[generate] /api/generate failed", id, res.status, err);
+        }
       }
 
-      const updated = await fetchPortfolio();
-      if (updated?.slug) {
-        setSyncResult({ slug: updated.slug, added: addedIds.length });
+      const final = await fetchPortfolio();
+      if (final?.slug) {
+        setSyncResult({ slug: final.slug, added: idsToGenerate.length });
       }
     } catch (e) {
       setCurrentStepLabel(e instanceof Error ? e.message : "Something went wrong.");
