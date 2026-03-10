@@ -107,7 +107,7 @@ export default async function PublicPortfolioPage({
   const isOwner = viewerSession?.user?.id === portfolio.userId;
 
   // Read cached GitHub graphs from DB (precomputed by worker).
-  const evolutionData: { month: string; commits: number }[] =
+  let evolutionData: { month: string; commits: number }[] =
     (portfolio as { contributionsJson?: string | null }).contributionsJson
       ? (JSON.parse((portfolio as { contributionsJson: string }).contributionsJson) as {
           month: string;
@@ -122,8 +122,6 @@ export default async function PublicPortfolioPage({
           value: number;
         }[])
       : [];
-
-  const commitsTimeRange: "all" | "year" = "year";
 
   // Developer journey: GitHub account + repos + custom entries
   const developerTimeline: {
@@ -156,6 +154,11 @@ export default async function PublicPortfolioPage({
         title: "Joined GitHub",
         subtitle: githubLogin ? `Created @${githubLogin}` : null,
       });
+    }
+    // Trim contributions graph so it starts at GitHub join month
+    const joinMonth = githubJoinDate.slice(0, 7);
+    if (joinMonth) {
+      evolutionData = evolutionData.filter(({ month }) => month >= joinMonth);
     }
   }
 
