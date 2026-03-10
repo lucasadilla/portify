@@ -204,8 +204,8 @@ export default async function PublicPortfolioPage({
         .slice(0, 10);
     }
   }
-  const commitsTimeRange: "all" | "year" = "year";
 
+  // Developer journey: GitHub account + repos + custom entries
   const developerTimeline: {
     kind: "account" | "repo" | "custom";
     id: string;
@@ -220,6 +220,20 @@ export default async function PublicPortfolioPage({
     stack?: string[];
     customKind?: string;
   }[] = [];
+
+  if (githubJoinDate) {
+    const joinYear = Number.parseInt(githubJoinDate.slice(0, 4), 10);
+    if (!Number.isNaN(joinYear)) {
+      developerTimeline.push({
+        kind: "account",
+        id: "github-account",
+        date: githubJoinDate,
+        year: joinYear,
+        title: "Joined GitHub",
+        subtitle: githubLogin ? `Created @${githubLogin}` : null,
+      });
+    }
+  }
 
   // Basic repo-based timeline items from our own DB
   for (const r of portfolio.repos) {
@@ -263,8 +277,6 @@ export default async function PublicPortfolioPage({
   developerTimeline.push(...customEntries);
   developerTimeline.sort((a, b) => a.date.localeCompare(b.date));
 
-  const githubJoinDate: string | null = null;
-  const githubLogin: string | null = null;
   const githubUsername = portfolio.user.username ?? null;
 
   return (
