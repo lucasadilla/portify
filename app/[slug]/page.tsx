@@ -122,8 +122,6 @@ export default async function PublicPortfolioPage({
   let githubJoinDate: string | null = null;
   let githubLogin: string | null = null;
   const token = await getAccessTokenForUser(portfolio.userId);
-  const githubUsername = portfolio.user.username ?? null;
-
   console.log("[portfolio] github token present:", !!token, "portfolioUserId:", portfolio.userId);
 
   if (token) {
@@ -270,8 +268,6 @@ export default async function PublicPortfolioPage({
   }));
   developerTimeline.push(...customEntries);
   developerTimeline.sort((a, b) => a.date.localeCompare(b.date));
-
-  const githubUsername = portfolio.user.username ?? null;
 
   return (
     <PortfolioView
