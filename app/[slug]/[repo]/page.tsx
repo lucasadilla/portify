@@ -2,6 +2,8 @@ import { notFound } from "next/navigation";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
+import { getAccessTokenForUser } from "@/lib/session";
+import { getRepoCommitHistory, getRepoLanguages } from "@/lib/github";
 import { ProjectPageView } from "@/app/u/[username]/[repo]/ProjectPageView";
 import {
   getDemoRepoByName,
@@ -94,9 +96,34 @@ export default async function ProjectPage({
 
   if (!repo) notFound();
 
-  // Do not call GitHub here – keep project page fast by relying only on precomputed data.
-  const commitData: { month: string; commits: number }[] = [];
-  const languageData: { name: string; value: number }[] = [];
+  // Per-repo contributions & languages from GitHub, fetched on demand for this project only.
+  let commitData: { month: string; commits: number }[] = [];
+  let languageData: { name: string; value: number }[] = [];
+
+  const token = await getAccessTokenForUser(portfolio.userId);
+  if (token) {
+    const [owner, repoShortName] = repo.repoFullName.split("/");
+    if (owner && repoShortName) {
+      try {
+        const [activity, langs] = await Promise.all([
+          getRepoCommitHistory(token, owner, repoShortName),
+          getRepoLanguages(token, owner, repoShortName),
+        ]);
+        commitData = activity
+          .map((a) => ({ month: a.month, commits: a.count }))
+          .sort((a, b) => a.month.localeCompare(b.month));
+        const total = Object.values(langs).reduce((a, b) => a + b, 0);
+        if (total > 0) {
+          languageData = Object.entries(langs)
+            .map(([name, value]) => ({ name, value: Math.round((value / total) * 100) }))
+            .sort((a, b) => b.value - a.value)
+            .slice(0, 10);
+        }
+      } catch {
+        // fall back to empty graphs if GitHub calls fail
+      }
+    }
+  }
 
   const stack = repo.detectedStackJson ? (JSON.parse(repo.detectedStackJson) as string[]) : [];
   const screenshots = repo.artifacts
