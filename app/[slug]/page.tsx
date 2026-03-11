@@ -106,7 +106,11 @@ export default async function PublicPortfolioPage({
 
   const socials = portfolio.socialsJson ? JSON.parse(portfolio.socialsJson) : {};
 
-  const isOwner = viewerSession?.user?.id === portfolio.userId;
+  const isOwner =
+    viewerSession?.user?.id === portfolio.userId ||
+    (process.env.NODE_ENV !== "production" &&
+      viewerUsername &&
+      viewerUsername.trim().toLowerCase() === (portfolio.user.username ?? "").trim().toLowerCase());
 
   // Read cached GitHub graphs from DB (precomputed by worker).
   let evolutionData: { month: string; commits: number }[] =
@@ -170,15 +174,20 @@ export default async function PublicPortfolioPage({
     });
   }
 
-  // Basic repo-based timeline items from our own DB, using commit history when available
+  // Basic repo-based timeline items from our own DB.
+  // Prefer the first month with commits from commitHistoryJson when available,
+  // otherwise fall back to the repo's createdAt.
   for (const r of portfolio.repos) {
     const commitHistoryJson = (r as { commitHistoryJson?: string | null }).commitHistoryJson ?? null;
     let timelineDateIso: string;
+
     if (commitHistoryJson) {
       try {
         const history = JSON.parse(commitHistoryJson) as { month: string; commits: number }[];
-        const first = history[0];
+        const firstWithCommits = history.find((h) => h && typeof h.month === "string" && h.commits > 0);
+        const first = firstWithCommits ?? history[0];
         if (first?.month) {
+          // Use first commit month as YYYY-MM-01
           timelineDateIso = `${first.month}-01T00:00:00.000Z`;
         } else {
           throw new Error("empty history");
@@ -201,6 +210,7 @@ export default async function PublicPortfolioPage({
             ? created.toISOString()
             : new Date().toISOString();
     }
+
     const year = Number.parseInt(timelineDateIso.slice(0, 4), 10) || new Date().getFullYear();
     const stack =
       r.detectedStackJson && r.detectedStackJson.trim().length > 0

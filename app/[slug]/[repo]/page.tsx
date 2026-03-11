@@ -149,7 +149,11 @@ export default async function ProjectPage({
     "Additional feature or screen",
   ];
 
-  const isOwner = viewerSession?.user?.id === portfolio.userId;
+  const isOwner =
+    viewerSession?.user?.id === portfolio.userId ||
+    (process.env.NODE_ENV !== "production" &&
+      viewerUsername &&
+      viewerUsername.trim().toLowerCase() === (portfolio.user.username ?? "").trim().toLowerCase());
   const repoForView = repo as typeof repo & {
     projectWebsiteUrl?: string | null;
     showCommitsGraph?: boolean;

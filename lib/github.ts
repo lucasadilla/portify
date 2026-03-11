@@ -82,42 +82,13 @@ export async function getRepoCommitHistory(
   const perPage = 100;
   const maxPagesPerYear = 10;
   const currentYear = new Date().getFullYear();
-  // Limit expensive Search API calls to recent history; older years contribute less to UX
-  const startYear = currentYear - 4;
+  const startYear = 2008;
   const headers: HeadersInit = {
     Authorization: `Bearer ${accessToken}`,
     Accept: "application/vnd.github.v3+json",
   };
 
-  // First, try the lightweight Stats API (last 52 weeks). This is cheaper and usually enough for graphs.
-  try {
-    const url = `${GITHUB_API}/repos/${owner}/${repo}/stats/commit_activity`;
-    const opts = { headers };
-    let res = await fetch(url, opts);
-    if (res.status === 202) {
-      await new Promise((r) => setTimeout(r, 2000));
-      res = await fetch(url, opts);
-    }
-    if (res.ok) {
-      const data = (await res.json()) as { week: number; total: number }[] | null;
-      if (Array.isArray(data) && data.length > 0) {
-        for (const w of data) {
-          if (w.week == null || w.total == null) continue;
-          const date = new Date(w.week * 1000);
-          const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
-          byMonth[month] = (byMonth[month] ?? 0) + w.total;
-        }
-      }
-    }
-  } catch {
-    // ignore stats errors and fall back to Search API below
-  }
-
-  if (Object.keys(byMonth).length > 0) {
-    return Object.entries(byMonth)
-      .map(([month, count]) => ({ month, count }))
-      .sort((a, b) => a.month.localeCompare(b.month));
-  }
+  // (We start with Search; if that fails completely we'll fall back to Stats below.)
 
   const searchYear = async (year: number): Promise<boolean> => {
     const from = `${year}-01-01`;
@@ -142,6 +113,27 @@ export async function getRepoCommitHistory(
     const ok = await searchYear(year);
     if (!ok) await new Promise((r) => setTimeout(r, 500));
     await new Promise((r) => setTimeout(r, 200));
+  }
+  // If Search API fails or returns nothing, fall back to Stats API (52 weeks).
+  if (Object.keys(byMonth).length === 0) {
+    const url = `${GITHUB_API}/repos/${owner}/${repo}/stats/commit_activity`;
+    const opts = { headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" } };
+    let res = await fetch(url, opts);
+    if (res.status === 202) {
+      await new Promise((r) => setTimeout(r, 2000));
+      res = await fetch(url, opts);
+    }
+    if (res.ok) {
+      const data = (await res.json()) as { week: number; total: number }[] | null;
+      if (Array.isArray(data) && data.length > 0) {
+        for (const w of data) {
+          if (w.week == null || w.total == null) continue;
+          const date = new Date(w.week * 1000);
+          const month = `${date.getUTCFullYear()}-${String(date.getUTCMonth() + 1).padStart(2, "0")}`;
+          byMonth[month] = (byMonth[month] ?? 0) + w.total;
+        }
+      }
+    }
   }
 
   return Object.entries(byMonth)
