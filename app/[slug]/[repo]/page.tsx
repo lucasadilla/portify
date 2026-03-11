@@ -49,7 +49,7 @@ export default async function ProjectPage({
         portfolioSlug="demo"
         userName="Demo Developer"
         viewerUsername={viewerUsername}
-        isOwner={false}
+        isOwner
         backgroundStyle={DEMO_BACKGROUND_STYLE}
         colorPalette={DEMO_COLOR_PALETTE}
         contributionsChartOrder={DEMO_CONTRIBUTIONS_CHART_ORDER}

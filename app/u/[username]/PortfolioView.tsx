@@ -802,17 +802,29 @@ export function PortfolioView({
                 </div>
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">Background style</Label>
-                  <select
-                    className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm"
-                    value={backgroundStyleDraft}
-                    onChange={(e) => setBackgroundStyleDraft(e.target.value)}
-                  >
-                    {BACKGROUND_STYLES.map((s) => (
-                      <option key={s.value} value={s.value}>
-                        {s.label} — {s.description}
-                      </option>
-                    ))}
-                  </select>
+                  <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {BACKGROUND_STYLES.map((s) => {
+                      const selected = backgroundStyleDraft === s.value;
+                      return (
+                        <button
+                          key={s.value}
+                          type="button"
+                          onClick={() => setBackgroundStyleDraft(s.value)}
+                          className={`flex items-center gap-3 rounded-lg border-2 px-3 py-2 text-left text-xs sm:text-sm transition-colors ${
+                            selected ? "border-primary bg-primary/10" : "border-border bg-muted/40 hover:bg-muted/70"
+                          }`}
+                        >
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full border border-border bg-background text-[10px] font-semibold">
+                            {s.label.charAt(0)}
+                          </span>
+                          <span className="flex-1 min-w-0">
+                            <span className="block font-medium truncate">{s.label}</span>
+                            <span className="block text-[11px] text-muted-foreground truncate">{s.description}</span>
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
                 </div>
                 <div>
                   <Label className="text-xs font-medium text-muted-foreground">Color palette</Label>

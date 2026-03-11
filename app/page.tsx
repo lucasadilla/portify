@@ -119,68 +119,68 @@ export default async function HomePage() {
               </div>
 
               {/* Hero preview card */}
-              <div className="relative">
-                <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-emerald-500/40 via-sky-500/40 to-violet-500/40 opacity-60 blur-xl" aria-hidden />
-                <div className="relative rounded-3xl border border-border/60 bg-card/95 shadow-[0_20px_60px_rgba(0,0,0,0.45)] backdrop-blur-sm p-5 md:p-6">
-                  {/* Soft static gradient background, echoing portfolio background choices */}
-                  <div className="pointer-events-none absolute inset-0 overflow-hidden rounded-3xl">
-                    <div className="absolute -top-20 -left-24 h-40 w-40 rounded-full bg-[radial-gradient(circle,theme(colors.violet.500),transparent_65%)] opacity-40 blur-3xl" />
-                    <div className="absolute -bottom-16 -right-24 h-44 w-44 rounded-full bg-[radial-gradient(circle,theme(colors.emerald.500),transparent_65%)] opacity-40 blur-3xl" />
-                    <div className="absolute inset-x-10 top-6 h-20 rounded-full bg-[radial-gradient(circle,theme(colors.sky.500),transparent_70%)] opacity-25 blur-2xl" />
+              <div className="relative group">
+                <div className="absolute -inset-1 rounded-3xl bg-gradient-to-tr from-emerald-500/40 via-sky-500/40 to-violet-500/40 opacity-50 group-hover:opacity-70 blur-xl transition-opacity duration-300" aria-hidden />
+                <div className="relative rounded-3xl border border-border/60 bg-card/95 shadow-xl shadow-black/20 backdrop-blur-sm overflow-hidden">
+                  {/* Soft static gradient background */}
+                  <div className="pointer-events-none absolute inset-0">
+                    <div className="absolute -top-20 -left-24 h-40 w-40 rounded-full bg-[radial-gradient(circle,theme(colors.violet.500),transparent_65%)] opacity-30 blur-3xl" />
+                    <div className="absolute -bottom-16 -right-24 h-44 w-44 rounded-full bg-[radial-gradient(circle,theme(colors.emerald.500),transparent_65%)] opacity-30 blur-3xl" />
+                    <div className="absolute inset-x-10 top-6 h-20 rounded-full bg-[radial-gradient(circle,theme(colors.sky.500),transparent_70%)] opacity-20 blur-2xl" />
                   </div>
-                  <div className="relative space-y-3">
+                  <div className="relative p-5 md:p-6 space-y-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
-                        <p className="text-xs uppercase tracking-[0.2em] text-muted-foreground mb-1">
-                          PORTFOLIO PREVIEW
+                        <p className="text-[10px] uppercase tracking-[0.22em] text-muted-foreground/90 font-medium mb-1.5">
+                          Your portfolio
                         </p>
-                        <h2 className="text-base md:text-lg font-semibold truncate">
-                          github.com/you/portify
+                        <h2 className="text-base md:text-lg font-semibold truncate" title="portify.com/your-name">
+                          portify.com/your-name
                         </h2>
                       </div>
-                      <div className="rounded-full bg-emerald-500/10 px-3 py-1 text-[10px] font-medium text-emerald-300 border border-emerald-500/40">
+                      <div className="shrink-0 rounded-full bg-emerald-500/15 px-3 py-1.5 text-[10px] font-semibold text-emerald-600 dark:text-emerald-300 border border-emerald-500/30">
                         Live from GitHub
                       </div>
                     </div>
-                    <div className="rounded-2xl border border-border/70 bg-background/80 p-3 md:p-4 space-y-3">
+                    <div className="rounded-2xl border border-border/60 bg-background/90 shadow-inner p-3.5 md:p-4 space-y-3.5">
                       {/* Mini demo header with avatar */}
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <div className="relative h-8 w-8 rounded-full border border-border/70 bg-background overflow-hidden">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="relative h-9 w-9 rounded-full border border-border/60 bg-background overflow-hidden shrink-0 ring-2 ring-background/80">
                             <div className="absolute inset-0 bg-gradient-to-tr from-emerald-500/70 via-sky-500/70 to-violet-500/70" />
                             <div className="absolute inset-[2px] rounded-full bg-[radial-gradient(circle_at_30%_20%,#ffffffcc,transparent_55%),radial-gradient(circle_at_80%_80%,#020617,transparent_65%)]" />
                           </div>
                           <div className="min-w-0">
-                            <p className="text-xs font-medium truncate">yourname.dev</p>
+                            <p className="text-xs font-semibold truncate text-foreground/95">your-name</p>
                             <p className="text-[11px] text-muted-foreground truncate">
                               TypeScript · Next.js · Open Source
                             </p>
                           </div>
                         </div>
-                        <div className="hidden md:flex items-center gap-1 rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-[10px] text-muted-foreground">
-                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+                        <div className="hidden md:flex items-center gap-1.5 rounded-full border border-border/60 bg-muted/50 px-2.5 py-1 text-[10px] text-muted-foreground">
+                          <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 animate-pulse" />
                           Auto-updates as you push
                         </div>
                       </div>
 
-                      {/* Contributions & languages + mini journey, laid out like a small dashboard */}
-                      <div className="flex items-center justify-between text-[10px] text-muted-foreground mt-1 mb-1">
-                        <span className="font-medium text-foreground/90">Contributions, languages & journey</span>
-                        <span>Demo view</span>
+                      {/* Contributions & languages + mini journey */}
+                      <div className="flex items-center justify-between text-[10px] text-muted-foreground pt-0.5">
+                        <span className="font-medium text-foreground/80">Contributions, languages & journey</span>
+                        <span className="text-muted-foreground/80">Demo</span>
                       </div>
                       <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                        <div className="rounded-xl border border-border/70 bg-background/90 p-2.5">
+                        <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 shadow-sm">
                           <EvolutionGraph data={HERO_EVOLUTION} className="space-y-1" />
                         </div>
                         <div className="flex flex-col gap-2.5">
-                          <div className="rounded-xl border border-border/70 bg-background/90 p-2.5">
+                          <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 shadow-sm">
                             <LanguageChart data={HERO_LANGUAGES} className="space-y-1" />
                           </div>
-                          {/* Mini developer journey timeline, echoing the portfolio view */}
-                          <div className="rounded-xl border border-border/70 bg-background/90 p-2.5 space-y-1.5">
+                          {/* Mini developer journey timeline */}
+                          <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 space-y-1.5 shadow-sm">
                             <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                              <span className="font-medium text-foreground/90">Developer journey</span>
-                              <span>Key moments</span>
+                              <span className="font-medium text-foreground/80">Developer journey</span>
+                              <span className="text-muted-foreground/80">Key moments</span>
                             </div>
                             <div className="space-y-1">
                               <div className="flex items-start gap-2 text-[10px]">

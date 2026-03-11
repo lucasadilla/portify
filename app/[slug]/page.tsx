@@ -83,6 +83,8 @@ export default async function PublicPortfolioPage({
       return (
         <PortfolioView
           portfolio={DEMO_PORTFOLIO}
+          isOwner
+          viewerUsername={viewerUsername}
           evolutionData={DEMO_EVOLUTION}
           languageData={DEMO_LANGUAGES}
           developerTimeline={DEMO_DEVELOPER_TIMELINE}
