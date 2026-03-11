@@ -170,12 +170,38 @@ export default async function PublicPortfolioPage({
     });
   }
 
-  // Basic repo-based timeline items from our own DB
+  // Basic repo-based timeline items from our own DB, using commit history when available
   for (const r of portfolio.repos) {
-    const created = r.createdAt;
-    const dateIso =
-      typeof created === "string" ? created : created instanceof Date ? created.toISOString() : new Date().toISOString();
-    const year = Number.parseInt(dateIso.slice(0, 4), 10) || new Date().getFullYear();
+    const commitHistoryJson = (r as { commitHistoryJson?: string | null }).commitHistoryJson ?? null;
+    let timelineDateIso: string;
+    if (commitHistoryJson) {
+      try {
+        const history = JSON.parse(commitHistoryJson) as { month: string; commits: number }[];
+        const first = history[0];
+        if (first?.month) {
+          timelineDateIso = `${first.month}-01T00:00:00.000Z`;
+        } else {
+          throw new Error("empty history");
+        }
+      } catch {
+        const created = r.createdAt;
+        timelineDateIso =
+          typeof created === "string"
+            ? created
+            : created instanceof Date
+              ? created.toISOString()
+              : new Date().toISOString();
+      }
+    } else {
+      const created = r.createdAt;
+      timelineDateIso =
+        typeof created === "string"
+          ? created
+          : created instanceof Date
+            ? created.toISOString()
+            : new Date().toISOString();
+    }
+    const year = Number.parseInt(timelineDateIso.slice(0, 4), 10) || new Date().getFullYear();
     const stack =
       r.detectedStackJson && r.detectedStackJson.trim().length > 0
         ? (JSON.parse(r.detectedStackJson) as string[])
@@ -187,7 +213,7 @@ export default async function PublicPortfolioPage({
     developerTimeline.push({
       kind: "repo",
       id: r.id,
-      date: dateIso.slice(0, 10),
+      date: timelineDateIso.slice(0, 10),
       year,
       title: r.repoFullName.split("/").pop() ?? r.repoFullName,
       subtitle: description,

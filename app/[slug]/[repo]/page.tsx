@@ -11,6 +11,7 @@ import {
   DEMO_COLOR_PALETTE,
   DEMO_CONTRIBUTIONS_CHART_ORDER,
 } from "@/lib/demoData";
+import { refreshRepoGitHubData } from "../../../worker/jobs/githubProfile";
 
 export default async function ProjectPage({
   params,
@@ -94,24 +95,44 @@ export default async function ProjectPage({
 
   if (!repo) notFound();
 
+  // Ensure per-repo GitHub data is populated so project graphs can render.
+  let repoWithData = repo;
+  try {
+    const needsRefresh =
+      !(repo as { commitHistoryJson?: string | null }).commitHistoryJson ||
+      !(repo as { languageBreakdownJson?: string | null }).languageBreakdownJson;
+    if (needsRefresh) {
+      await refreshRepoGitHubData(repo.id).catch(() => {});
+      const refreshed = await prisma.portfolioRepo.findUnique({
+        where: { id: repo.id },
+        include: { artifacts: { orderBy: { sortOrder: "asc" } } },
+      });
+      if (refreshed) {
+        repoWithData = refreshed as typeof repoWithData;
+      }
+    }
+  } catch {
+    // Ignore refresh errors; we'll fall back to existing data if present.
+  }
+
   const commitData: { month: string; commits: number }[] =
-    (repo as { commitHistoryJson?: string | null }).commitHistoryJson
-      ? (JSON.parse((repo as { commitHistoryJson: string }).commitHistoryJson) as {
+    (repoWithData as { commitHistoryJson?: string | null }).commitHistoryJson
+      ? (JSON.parse((repoWithData as { commitHistoryJson: string }).commitHistoryJson) as {
           month: string;
           commits: number;
         }[])
       : [];
 
   const languageData: { name: string; value: number }[] =
-    (repo as { languageBreakdownJson?: string | null }).languageBreakdownJson
-      ? (JSON.parse((repo as { languageBreakdownJson: string }).languageBreakdownJson) as {
+    (repoWithData as { languageBreakdownJson?: string | null }).languageBreakdownJson
+      ? (JSON.parse((repoWithData as { languageBreakdownJson: string }).languageBreakdownJson) as {
           name: string;
           value: number;
         }[])
       : [];
 
-  const stack = repo.detectedStackJson ? (JSON.parse(repo.detectedStackJson) as string[]) : [];
-  const screenshots = repo.artifacts
+  const stack = repoWithData.detectedStackJson ? (JSON.parse(repoWithData.detectedStackJson) as string[]) : [];
+  const screenshots = repoWithData.artifacts
     .filter((a) => a.type === "screenshot")
     .map((a) => {
       let caption: string | null = null;
@@ -124,7 +145,7 @@ export default async function ProjectPage({
       }
       return { id: a.id, url: a.url, caption };
     });
-  const diagrams = repo.artifacts
+  const diagrams = repoWithData.artifacts
     .filter((a) => a.type === "diagram")
     .map((a) => {
       let description: string | null = null;
@@ -150,7 +171,7 @@ export default async function ProjectPage({
   ];
 
   const isOwner = viewerSession?.user?.id === portfolio.userId;
-  const repoForView = repo as typeof repo & {
+  const repoForView = repoWithData as typeof repoWithData & {
     projectWebsiteUrl?: string | null;
     showCommitsGraph?: boolean;
     showLanguagesGraph?: boolean;

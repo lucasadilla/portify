@@ -93,6 +93,53 @@ export default function GeneratePage() {
     })();
   }, [fetchPortfolio, fetchRepos]);
 
+  // If the user refreshes or navigates back while jobs are running,
+  // detect in-progress generation and resume the "building" UI.
+  useEffect(() => {
+    if (loading) return;
+    if (phase !== "idle") return;
+
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await fetch("/api/generate/status");
+        if (!res.ok || cancelled) return;
+        const data = await res.json();
+        const portfolioData = data.portfolio ?? null;
+        if (portfolioData?.repos) setPortfolio(portfolioData);
+
+        const reposInPortfolio = portfolioData?.repos ?? [];
+        const total = reposInPortfolio.length;
+        const done = reposInPortfolio.filter((r: Repo) => r.status === "DONE").length;
+        const failed = reposInPortfolio.filter((r: Repo) => r.status === "FAILED").length;
+        const pending = reposInPortfolio.filter(
+          (r: Repo) => r.status === "QUEUED" || r.status === "PROCESSING"
+        );
+
+        if (!pending.length) return;
+
+        // There is active work: resume building state and seed progress/labels.
+        setPhase("building");
+        setOverallProgress(total ? Math.round(((done + failed) / total) * 100) : 0);
+
+        const first = pending[0];
+        setCurrentRepoName(first.repoFullName);
+
+        const activeJob = data.activeJob ?? null;
+        const status = activeJob?.status ?? first.status;
+        const jobs = activeJob?.jobs ?? [];
+        const { stepLabel } = jobProgress(status, jobs);
+        setCurrentStepLabel(stepLabel);
+      } catch {
+        // Ignore; regular polling will handle connection issues when building.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [loading, phase]);
+
   // If we stay in "preparing" too long, bail out so the user is not stuck
   useEffect(() => {
     if (phase !== "preparing") return;
