@@ -51,5 +51,8 @@ export function createGenerateWorker(
     concurrency: 2,
     lockDuration: LOCK_DURATION_MS,
     lockRenewTime: LOCK_RENEW_MS,
+    // Reduce how often the worker hits Redis when idle.
+    // This lowers Upstash request usage without affecting UX.
+    blockTimeout: 60, // seconds to block on BZPOPMIN before retrying
   });
 }
