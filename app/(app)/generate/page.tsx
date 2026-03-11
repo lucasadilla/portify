@@ -311,12 +311,17 @@ export default function GeneratePage() {
               <h2 className="text-sm font-semibold">
                 {phase === "preparing" ? "Preparing" : "Building your portfolio"}
               </h2>
-              <p className="text-xs text-muted-foreground mt-0.5 truncate">
-                {phase === "preparing"
-                  ? prepareLabel
-                  : currentRepoName
-                    ? `${currentRepoName} — ${currentStepLabel || "…"}`
-                    : currentStepLabel || "Starting…"}
+              <p className="flex items-center gap-2 text-xs text-muted-foreground mt-0.5 truncate">
+                <span className="truncate">
+                  {phase === "preparing"
+                    ? prepareLabel
+                    : currentRepoName
+                      ? `${currentRepoName} — ${currentStepLabel || "…"}`
+                      : currentStepLabel || "Starting…"}
+                </span>
+                {(phase === "preparing" || phase === "building") && (
+                  <Loader2 className="h-3 w-3 animate-spin text-muted-foreground flex-shrink-0" />
+                )}
               </p>
             </div>
           </div>
