@@ -463,7 +463,7 @@ export function ProjectPageView({
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               {effectiveChartOrder
-                .filter((id) => (id === "evolution" && showCommitsGraph && repo.commitData.length > 0) || (id === "languages" && showLanguagesGraph && repo.languageData.length > 0))
+                .filter((id) => (id === "evolution" && showCommitsGraph) || (id === "languages" && showLanguagesGraph))
                 .map((chartId) => {
                   const isEvolution = chartId === "evolution";
                   return (
@@ -492,12 +492,21 @@ export function ProjectPageView({
                       onDragEnd={() => setDraggedChartId(null)}
                     >
                       <CardContent className="pt-6">
-                        {isEvolution ? <EvolutionGraph data={repo.commitData} /> : <LanguageChart data={repo.languageData} />}
+                        {isEvolution ? (
+                          <EvolutionGraph data={repo.commitData} />
+                        ) : (
+                          <LanguageChart data={repo.languageData} />
+                        )}
                       </CardContent>
                     </Card>
                   );
                 })}
             </div>
+            {!editMode && (showCommitsGraph || showLanguagesGraph) && !repo.commitData.length && !repo.languageData.length && (
+              <p className="mt-2 text-xs text-muted-foreground">
+                No public commit or language data is available for this repository yet.
+              </p>
+            )}
             {editMode && isOwner && (showCommitsGraph || showLanguagesGraph) && (
               <p className="mt-2 text-xs text-muted-foreground">Drag cards to swap their positions. Saves to your portfolio.</p>
             )}
