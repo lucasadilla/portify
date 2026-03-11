@@ -106,10 +106,10 @@ export default async function PublicPortfolioPage({
 
   const socials = portfolio.socialsJson ? JSON.parse(portfolio.socialsJson) : {};
 
-  const isOwner =
+  const isOwner: boolean =
     viewerSession?.user?.id === portfolio.userId ||
     (process.env.NODE_ENV !== "production" &&
-      viewerUsername &&
+      !!viewerUsername &&
       viewerUsername.trim().toLowerCase() === (portfolio.user.username ?? "").trim().toLowerCase());
 
   // Read cached GitHub graphs from DB (precomputed by worker).
