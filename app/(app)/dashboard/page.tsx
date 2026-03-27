@@ -55,6 +55,7 @@ export default function DashboardPage() {
   };
   const [jobPoll, setJobPoll] = useState<Record<string, { status: string; progress: number; error?: string; stepLabel?: string }>>({});
   const [repoErrors, setRepoErrors] = useState<Record<string, string>>({});
+  const [reposFetchError, setReposFetchError] = useState<string | null>(null);
 
   function jobProgress(repoStatus: string, jobs: { type: string; status: string; progress: number }[]): { progress: number; stepLabel: string } {
     if (repoStatus === "QUEUED" && !jobs?.length) return { progress: 0, stepLabel: "Queued, waiting for worker…" };
@@ -76,11 +77,19 @@ export default function DashboardPage() {
   }, []);
 
   const fetchRepos = useCallback(async () => {
+    setReposFetchError(null);
     const res = await fetch("/api/repos");
-    if (res.ok) {
-      const data = await res.json();
-      setRepos(data);
+    if (!res.ok) {
+      setRepos([]);
+      setReposFetchError(
+        res.status === 401
+          ? "Sign in again so we can load your GitHub repositories."
+          : "Could not load repositories from GitHub."
+      );
+      return;
     }
+    const data = await res.json();
+    setRepos(Array.isArray(data) ? data : []);
   }, []);
 
   useEffect(() => {
@@ -206,9 +215,16 @@ export default function DashboardPage() {
           {repos.map((repo) => (
             <Card key={repo.id}>
               <CardHeader className="py-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="text-base">{repo.fullName}</CardTitle>
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <CardTitle className="text-base">{repo.fullName}</CardTitle>
+                      {repo.private && (
+                        <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground border border-border shrink-0">
+                          Private
+                        </span>
+                      )}
+                    </div>
                     <p className="text-sm text-muted-foreground">{repo.description ?? "No description"}</p>
                   </div>
                   <Button
@@ -224,8 +240,13 @@ export default function DashboardPage() {
             </Card>
           ))}
         </div>
-        {repos.length === 0 && (
-          <p className="text-sm text-muted-foreground">No public repos found. Make sure you’ve granted repo access to Portify.</p>
+        {reposFetchError && (
+          <p className="text-sm text-amber-600 dark:text-amber-200">{reposFetchError} If you changed GitHub permissions, sign out and sign back in.</p>
+        )}
+        {!reposFetchError && repos.length === 0 && (
+          <p className="text-sm text-muted-foreground">
+            No repositories found. Add a repo on GitHub, or sign out and sign in again so we can access private repositories.
+          </p>
         )}
       </div>
     </div>

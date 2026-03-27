@@ -40,7 +40,7 @@ export async function getAllGitHubRepos(accessToken: string): Promise<GitHubRepo
     if (!res.ok) throw new Error("Failed to fetch repos");
     const data = (await res.json()) as RawRepo[];
     const mapped = data.map((r) => mapRawToRepo(r));
-    all.push(...mapped.filter((r) => !r.private));
+    all.push(...mapped);
     if (mapped.length < perPage) break;
     page += 1;
   }
@@ -70,6 +70,48 @@ export async function getRepoLanguages(accessToken: string, owner: string, repo:
   });
   if (!res.ok) return {};
   return await res.json();
+}
+
+/** Normalize GitHub language bytes to percentages (0–100). */
+export function languageBytesToPercentages(langs: Record<string, number>): { language: string; percentage: number }[] {
+  const total = Object.values(langs).reduce((a, b) => a + b, 0);
+  if (total <= 0) return [];
+  return Object.entries(langs)
+    .map(([language, bytes]) => ({ language, percentage: Math.round((bytes / total) * 100) }))
+    .filter((r) => r.percentage > 0)
+    .sort((a, b) => b.percentage - a.percentage);
+}
+
+/**
+ * Aggregate language bytes across repos (same approach as the portfolio worker).
+ * Uses the user's accessible repos list (up to maxRepos).
+ */
+export async function getAccountLanguagePercentages(
+  accessToken: string,
+  maxRepos = 30
+): Promise<{ language: string; percentage: number }[]> {
+  let repos: GitHubRepo[] = [];
+  try {
+    repos = await getGitHubRepos(accessToken);
+  } catch {
+    return [];
+  }
+  const slice = repos.slice(0, maxRepos);
+  const langBytes: Record<string, number> = {};
+  const results = await Promise.allSettled(
+    slice.map(async (repo) => {
+      const [owner, repoName] = repo.fullName.split("/");
+      return owner && repoName ? getRepoLanguages(accessToken, owner, repoName) : {};
+    })
+  );
+  for (const r of results) {
+    if (r.status === "fulfilled") {
+      for (const [lang, bytes] of Object.entries(r.value) as [string, number][]) {
+        langBytes[lang] = (langBytes[lang] ?? 0) + bytes;
+      }
+    }
+  }
+  return languageBytesToPercentages(langBytes).slice(0, 15);
 }
 
 /** Full commit history for a single repo: all years via Search API, then falls back to Stats API (last 52 weeks). */
@@ -153,16 +195,20 @@ function parseCommitItemsIntoByMonth(
   }
 }
 
-/** Full contribution history: commits by this user across their whole GitHub history. Uses Search API year-by-year, then falls back to last 1000 commits. */
+/**
+ * Commits by this user (Search API year-by-year), then falls back to last pages of `author:` search.
+ * @param sinceYear First calendar year to search (default 2008). Use a recent year for faster interactive routes.
+ */
 export async function getContributionHistoryByAuthor(
   accessToken: string,
-  username: string
+  username: string,
+  sinceYear: number = 2008
 ): Promise<CommitActivity[]> {
   const byMonth: Record<string, number> = {};
   const perPage = 100;
   const maxPagesPerYear = 10;
   const currentYear = new Date().getFullYear();
-  const startYear = 2008;
+  const loopStart = Math.min(Math.max(2008, sinceYear), currentYear);
   const headers: HeadersInit = {
     Authorization: `Bearer ${accessToken}`,
     Accept: "application/vnd.github.v3+json",
@@ -182,7 +228,7 @@ export async function getContributionHistoryByAuthor(
     return true;
   };
 
-  for (let year = startYear; year <= currentYear; year++) {
+  for (let year = loopStart; year <= currentYear; year++) {
     const from = `${year}-01-01`;
     const to = `${year}-12-31`;
     const qRange = `author:${username} author-date:${from}..${to}`;

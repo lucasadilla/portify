@@ -17,9 +17,17 @@ import { Switch } from "@/components/ui/switch";
 import { PortfolioBackground } from "@/components/portfolio-backgrounds";
 import { getPaletteStyle } from "@/lib/colorPalettes";
 import { getDiagramKindLabel, DIAGRAM_KINDS } from "@/lib/diagramKinds";
+import { AskAgent } from "@/components/AskAgent";
 
 type ScreenshotItem = { id: string; url: string; caption: string };
-type DiagramItem = { id: string; url: string; description: string | null; kind?: string };
+type DiagramItem = {
+  id: string;
+  url: string;
+  description: string | null;
+  kind?: string;
+  mermaidSource?: string | null;
+  recharts?: unknown;
+};
 
 const DEFAULT_CHART_ORDER = ["evolution", "languages"] as const;
 function normalizeChartOrder(order: string[] | undefined): string[] {
@@ -676,6 +684,17 @@ export function ProjectPageView({
           </section>
         )}
 
+        {editMode && isOwner && portfolioSlug !== "demo" && (
+          <section className="mb-10">
+            <AskAgent
+              scope="repo"
+              portfolioSlug={portfolioSlug}
+              portfolioRepoId={repoId}
+              onSaved={() => router.refresh()}
+            />
+          </section>
+        )}
+
         {/* Diagrams (architecture, data flow, API routes, etc.) */}
         {(showDiagram || (editMode && isOwner)) && (repo.diagrams.length > 0 || (editMode && isOwner)) && (
           <section className="mb-10">
@@ -748,7 +767,7 @@ export function ProjectPageView({
                       <h3 className="text-sm font-medium text-muted-foreground mb-3">
                         {getDiagramKindLabel(d.kind)}
                       </h3>
-                      <ArchitectureDiagram url={d.url} />
+                      <ArchitectureDiagram url={d.url} mermaidSource={d.mermaidSource} recharts={d.recharts} />
                     </CardContent>
                     <div className="px-6 pb-4">
                       {editMode && isOwner ? (

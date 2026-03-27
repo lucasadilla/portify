@@ -10,6 +10,7 @@ import {
   DEMO_LANGUAGES,
   DEMO_DEVELOPER_TIMELINE,
 } from "@/lib/demoData";
+import { parseVisualAgentChartsJson } from "@/lib/visualAgentCharts";
 
 const MAX_REPOS_FOR_GRAPHS = 30;
 
@@ -248,8 +249,14 @@ export default async function PublicPortfolioPage({
   developerTimeline.push(...customEntries);
   developerTimeline.sort((a, b) => a.date.localeCompare(b.date));
 
+  const visualAgentCharts = parseVisualAgentChartsJson(
+    (portfolio as { visualAgentChartsJson?: string | null }).visualAgentChartsJson
+  );
+
   return (
     <PortfolioView
+      portfolioId={portfolio.id}
+      visualAgentCharts={visualAgentCharts}
       portfolio={{
         slug: portfolio.slug,
         bio: portfolio.bio,

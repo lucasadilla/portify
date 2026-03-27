@@ -10,6 +10,8 @@ export interface EvolutionDataPoint {
 interface EvolutionGraphProps {
   data: EvolutionDataPoint[];
   className?: string;
+  /** Omit inner heading when the parent supplies the title. */
+  heading?: string | null;
 }
 
 function formatMonth(label: string): string {
@@ -20,18 +22,19 @@ function formatMonth(label: string): string {
   return `${monthName} ${y}`;
 }
 
-export function EvolutionGraph({ data, className }: EvolutionGraphProps) {
+export function EvolutionGraph({ data, className, heading }: EvolutionGraphProps) {
+  const h = heading === undefined ? "Contributions over time" : heading;
   if (!data.length) {
     return (
       <div className={className}>
-        <h3 className="text-sm font-medium mb-2">Contributions over time</h3>
+        {h !== null && h !== "" && <h3 className="text-sm font-medium mb-2">{h}</h3>}
         <p className="text-sm text-muted-foreground">No contribution data available.</p>
       </div>
     );
   }
   return (
     <div className={className}>
-      <h3 className="text-sm font-medium mb-2">Contributions over time</h3>
+      {h !== null && h !== "" && <h3 className="text-sm font-medium mb-2">{h}</h3>}
       <div className="h-[220px] w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 5, right: 5, left: 0, bottom: 5 }}>

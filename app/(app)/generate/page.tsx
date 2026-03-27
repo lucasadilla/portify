@@ -65,6 +65,7 @@ export default function GeneratePage() {
   const [currentRepoName, setCurrentRepoName] = useState<string | null>(null);
   const [currentStepLabel, setCurrentStepLabel] = useState<string>("");
   const [connectionIssue, setConnectionIssue] = useState(false);
+  const [reposFetchError, setReposFetchError] = useState<string | null>(null);
   const lastQueuedAtRef = useRef<number | null>(null);
 
   const fetchPortfolio = useCallback(async (): Promise<Portfolio | null> => {
@@ -79,10 +80,19 @@ export default function GeneratePage() {
   }, []);
 
   const fetchRepos = useCallback(async () => {
+    setReposFetchError(null);
     const res = await fetch("/api/repos");
-    if (!res.ok) return;
+    if (!res.ok) {
+      setRepos([]);
+      setReposFetchError(
+        res.status === 401
+          ? "Sign in again so we can load your GitHub repositories."
+          : "Could not load repositories from GitHub. Try again in a moment."
+      );
+      return;
+    }
     const data = await res.json();
-    setRepos(data);
+    setRepos(Array.isArray(data) ? data : []);
   }, []);
 
   useEffect(() => {
@@ -465,9 +475,20 @@ export default function GeneratePage() {
           We only generate for the repos you pick. You can always add more later from the dashboard.
         </p>
         <div className="mt-2 max-h-[420px] w-full overflow-y-auto rounded-xl border border-border/60 bg-card/90">
-          {repos.length === 0 ? (
-            <div className="px-4 py-6 text-sm text-muted-foreground text-center">
-              No public repos found. Make sure Portify has access to your GitHub account.
+          {reposFetchError ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center space-y-2">
+              <p>{reposFetchError}</p>
+              <p className="text-xs">
+                If you recently changed GitHub permissions, sign out and sign back in with GitHub to refresh access.
+              </p>
+            </div>
+          ) : repos.length === 0 ? (
+            <div className="px-4 py-6 text-sm text-muted-foreground text-center space-y-2">
+              <p>No repositories found for your account.</p>
+              <p className="text-xs">
+                Create a repo on GitHub, or sign out and sign in again so we can request access to private repositories
+                (if you only have private repos).
+              </p>
             </div>
           ) : (
             <ul className="divide-y divide-border/60">
@@ -495,11 +516,18 @@ export default function GeneratePage() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center justify-between gap-2">
                         <p className="font-medium truncate">{r.fullName}</p>
-                        {inPortfolio && (
-                          <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/40">
-                            In portfolio
-                          </span>
-                        )}
+                        <div className="flex shrink-0 items-center gap-1.5">
+                          {r.private && (
+                            <span className="rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground border border-border">
+                              Private
+                            </span>
+                          )}
+                          {inPortfolio && (
+                            <span className="rounded-full bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-300 border border-emerald-500/40">
+                              In portfolio
+                            </span>
+                          )}
+                        </div>
                       </div>
                       <p className="text-xs text-muted-foreground truncate">
                         {r.description ?? "No description"}

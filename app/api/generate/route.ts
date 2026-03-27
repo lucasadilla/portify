@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const token = await getAccessToken();
+  const token = await getAccessToken(req);
   if (!token) return NextResponse.json({ error: "GitHub token missing" }, { status: 400 });
 
   await prisma.portfolioRepo.update({

@@ -3,6 +3,7 @@
  * Stored in artifact metadata as diagramKind.
  */
 export const DIAGRAM_KINDS = [
+  { value: "visual-agent", label: "AI chart (ask your GitHub data)" },
   { value: "architecture", label: "Architecture diagram" },
   { value: "data-flow", label: "Data flow diagram" },
   { value: "api-routes", label: "API route map" },

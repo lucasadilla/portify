@@ -14,6 +14,8 @@ const COLORS = ["#3b82f6", "#22c55e", "#eab308", "#ef4444", "#a855f7", "#06b6d4"
 interface LanguageChartProps {
   data: LanguageSlice[];
   className?: string;
+  /** Omit inner heading when the parent supplies the title (e.g. Ask agent pie). */
+  heading?: string | null;
 }
 
 type CustomTooltipProps = TooltipProps<number, string>;
@@ -31,13 +33,14 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   );
 }
 
-export function LanguageChart({ data, className }: LanguageChartProps) {
+export function LanguageChart({ data, className, heading }: LanguageChartProps) {
   const [activeIndex, setActiveIndex] = useState<number | null>(null);
   if (!data.length) return null;
   const withColors = data.map((d, i) => ({ ...d, color: d.color ?? COLORS[i % COLORS.length] }));
+  const title = heading === undefined ? "Languages" : heading;
   return (
     <div className={`min-w-0 w-full ${className ?? ""}`}>
-      <h3 className="text-base font-medium mb-2">Languages</h3>
+      {title !== null && title !== "" && <h3 className="text-base font-medium mb-2">{title}</h3>}
       <div className="h-[260px] w-full min-w-0 [&_.recharts-surface]:max-w-full">
         <ResponsiveContainer width="100%" height="100%">
           <PieChart margin={{ top: 6, right: 6, left: 6, bottom: 6 }}>

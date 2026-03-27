@@ -6,12 +6,13 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { getTechBadgeClassName } from "@/lib/badgeColors";
 import { Button } from "@/components/ui/button";
 import { EvolutionGraph } from "@/components/EvolutionGraph";
 import { LanguageChart } from "@/components/LanguageChart";
-import { Mail, Globe, Linkedin, Github, Twitter, Instagram, Youtube, MessageCircle, Code2, BookOpen, Newspaper, Video, Plus, Loader2, ChevronUp, ChevronDown, Pin, GripVertical } from "lucide-react";
+import { Mail, Globe, Linkedin, Github, Twitter, Instagram, Youtube, MessageCircle, Code2, BookOpen, Newspaper, Video, Plus, Loader2, ChevronUp, ChevronDown, Pin, GripVertical, X } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { SignedInNav } from "@/components/SignedInNav";
@@ -19,6 +20,10 @@ import { AnimateInView } from "@/components/AnimateInView";
 import { SOCIAL_LINK_KEYS } from "@/lib/socialLinks";
 import { PortfolioBackground, BACKGROUND_STYLES } from "@/components/portfolio-backgrounds";
 import { COLOR_PALETTES, getPaletteStyle, getPaletteIds } from "@/lib/colorPalettes";
+import { AskAgent } from "@/components/AskAgent";
+import { MermaidBlock } from "@/components/MermaidBlock";
+import { VisualAgentDataChart } from "@/components/VisualAgentDataChart";
+import type { SavedVisualAgentChart } from "@/lib/visualAgentCharts";
 
 type RepoArtifact = { id: string; type: string; url: string };
 
@@ -52,6 +57,8 @@ function normalizeChartOrder(order: string[] | undefined): string[] {
 }
 
 type Props = {
+  /** Server-only id for Visual SQL Agent (omit on demo). */
+  portfolioId?: string | null;
   portfolio: {
     slug: string;
     bio: string | null;
@@ -89,6 +96,8 @@ type Props = {
   githubUsername?: string | null;
   viewerUsername?: string | null;
   isOwner?: boolean;
+  /** Saved Visual SQL Agent charts for the portfolio landing page only. */
+  visualAgentCharts?: SavedVisualAgentChart[];
 };
 
 const MOCK_EVOLUTION: EvolutionPoint[] = [
@@ -276,6 +285,7 @@ function TimelineCard({ entry, resolveProjectHref, router, githubUsername, onDel
 
 export function PortfolioView({
   portfolio,
+  portfolioId = null,
   isUnpublished,
   isPublished: isPublishedProp = true,
   evolutionData = [],
@@ -286,8 +296,45 @@ export function PortfolioView({
   githubUsername,
   viewerUsername,
   isOwner,
+  visualAgentCharts = [],
 }: Props) {
   const router = useRouter();
+
+  async function deletePortfolioVisualChart(chartId: string) {
+    if (!portfolioId) return;
+    const res = await fetch(
+      `/api/portfolio/visual-agent-charts?portfolioId=${encodeURIComponent(portfolioId)}&chartId=${encodeURIComponent(chartId)}`,
+      { method: "DELETE" }
+    );
+    if (res.ok) router.refresh();
+  }
+
+  const [chartTitleDrafts, setChartTitleDrafts] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    setChartTitleDrafts((prev) => {
+      const next: Record<string, string> = { ...prev };
+      for (const c of visualAgentCharts) {
+        if (next[c.id] === undefined) {
+          next[c.id] = (c.title ?? c.question).slice(0, 120);
+        }
+      }
+      for (const id of Object.keys(next)) {
+        if (!visualAgentCharts.some((c) => c.id === id)) delete next[id];
+      }
+      return next;
+    });
+  }, [visualAgentCharts]);
+
+  async function patchPortfolioChartTitle(chartId: string, title: string) {
+    if (!portfolioId) return;
+    const res = await fetch("/api/portfolio/visual-agent-charts", {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ portfolioId, chartId, title }),
+    });
+    if (res.ok) router.refresh();
+  }
   const { user, repos, bio, socials, slug, backgroundStyle = "minimal", displayName: displayNameOverride, imageUrl: imageUrlOverride, sectionOrder: sectionOrderProp, contributionsChartOrder: contributionsChartOrderProp, colorPalette: colorPaletteProp } = portfolio;
 
   function normalizeSectionOrder(order: string[] | undefined): string[] {
@@ -538,6 +585,10 @@ export function PortfolioView({
     const res = await fetch("/api/repos");
     if (res.ok) {
       const data = await res.json();
+      if (!Array.isArray(data)) {
+        setAvailableRepos([]);
+        return;
+      }
       const existing = new Set(repos.map((r) => r.repoFullName.toLowerCase()));
       setAvailableRepos(
         data.filter((r: { fullName: string }) => !existing.has(r.fullName.toLowerCase())).map((r: { fullName: string; defaultBranch: string; description: string | null }) => ({
@@ -890,7 +941,10 @@ export function PortfolioView({
         </section>
             );
           if (sectionId === "contributions")
-            return (showCommitsGraph || showLanguagesGraph) ? (
+            return (showCommitsGraph ||
+              showLanguagesGraph ||
+              (editMode && isOwner && portfolioId) ||
+              visualAgentCharts.length > 0) ? (
           <section key="contributions" className="mb-12">
             <h2 className="text-xl font-semibold mb-1">Contributions & languages</h2>
             <p className="text-sm text-muted-foreground mb-4">
@@ -968,7 +1022,66 @@ export function PortfolioView({
                   );
                   return CardWrapper;
                 })}
+              {visualAgentCharts.map((chart) => (
+                <Card key={chart.id} className="relative overflow-hidden border-border/70">
+                  {editMode && isOwner && (
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="icon"
+                      className="absolute right-2 top-2 z-10 h-8 w-8 rounded-full"
+                      onClick={() => deletePortfolioVisualChart(chart.id)}
+                      aria-label="Remove chart"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                  <CardContent className="pt-6">
+                    {editMode && isOwner ? (
+                      <Input
+                        className="text-sm font-medium mb-3 h-9"
+                        value={
+                          chartTitleDrafts[chart.id] !== undefined
+                            ? chartTitleDrafts[chart.id]
+                            : chart.title ?? chart.question
+                        }
+                        onChange={(e) =>
+                          setChartTitleDrafts((prev) => ({ ...prev, [chart.id]: e.target.value }))
+                        }
+                        onBlur={() => {
+                          const t = (
+                            chartTitleDrafts[chart.id] ??
+                            chart.title ??
+                            chart.question
+                          ).trim();
+                          void patchPortfolioChartTitle(chart.id, t);
+                        }}
+                        maxLength={120}
+                      />
+                    ) : (
+                      <h3 className="text-sm font-medium mb-3 text-foreground">
+                        {(chart.title ?? chart.question).slice(0, 200)}
+                      </h3>
+                    )}
+                    {chart.displayKind === "recharts" && chart.recharts ? (
+                      <VisualAgentDataChart payload={chart.recharts} />
+                    ) : (
+                      chart.mermaidSource?.trim() && <MermaidBlock code={chart.mermaidSource} />
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
             </div>
+            {editMode && isOwner && portfolioId && slug !== "demo" && (
+              <div className="mt-6">
+                <AskAgent
+                  scope="profile"
+                  portfolioSlug={slug}
+                  portfolioId={portfolioId}
+                  onSaved={() => router.refresh()}
+                />
+              </div>
+            )}
             {editMode && isOwner && (
               <div className="mt-3 flex flex-wrap gap-2 text-xs text-muted-foreground">
                 {!showCommitsGraph && (

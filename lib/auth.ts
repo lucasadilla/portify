@@ -2,6 +2,7 @@ import { PrismaAdapter } from "@auth/prisma-adapter";
 import { NextAuthOptions } from "next-auth";
 import GitHubProvider from "next-auth/providers/github";
 import { prisma } from "@/lib/db";
+import { nextAuthUsesSecureCookies } from "@/lib/nextAuthCookies";
 
 // Trim quotes that sometimes end up in .env values
 const githubId = process.env.GITHUB_ID?.replace(/^["']|["']$/g, "").trim();
@@ -39,10 +40,24 @@ export const authOptions: NextAuthOptions = {
       if (url === baseUrl || url === `${baseUrl}/`) return `${baseUrl}/generate`;
       return url;
     },
-    async jwt({ token, user, profile }) {
+    async jwt({ token, user, account, profile }) {
+      // Persist GitHub OAuth token on the JWT so API routes can call GitHub (Prisma Account
+      // row may be missing e.g. adapter disabled, or token not persisted).
+      if (account?.provider === "github" && account.access_token) {
+        token.githubAccessToken = account.access_token;
+      }
       if (user) {
         token.uid = user.id;
         token.username = (user as { username?: string }).username ?? (user as { name?: string }).name ?? (profile as { login?: string })?.login ?? (token.name as string);
+      }
+      // Older sessions may lack githubAccessToken on the JWT; hydrate from DB when missing.
+      const userId = (token.uid as string | undefined) ?? token.sub;
+      if (!token.githubAccessToken && userId) {
+        const row = await prisma.account.findFirst({
+          where: { userId, provider: "github" },
+          select: { access_token: true },
+        });
+        if (row?.access_token) token.githubAccessToken = row.access_token;
       }
       return token;
     },
@@ -60,27 +75,38 @@ export const authOptions: NextAuthOptions = {
     signOut: "/auth/signout",
     error: "/auth-error",
   },
-  events: useAdapter
-    ? {
-        async signIn({ user, account, profile }) {
-          if (!user?.id || account?.provider !== "github") return;
-          const providerAccountId = account.providerAccountId as string;
-          const login = profile && "login" in profile ? (profile as { login: string }).login : user.name ?? null;
-          await prisma.user.update({
-            where: { id: user.id },
+  events: {
+    async signIn({ user, account, profile }) {
+      if (account?.provider === "github" && account.access_token && user?.id) {
+        await prisma.account
+          .updateMany({
+            where: { userId: user.id, provider: "github" },
             data: {
-              githubId: providerAccountId,
-              username: login,
-              avatarUrl: user.image ?? undefined,
+              access_token: account.access_token,
+              refresh_token: account.refresh_token ?? undefined,
+              scope: account.scope ?? undefined,
             },
-          }).catch(() => {});
-        },
+          })
+          .catch(() => {});
       }
-    : undefined,
+      if (useAdapter && user?.id && account?.provider === "github") {
+        const providerAccountId = account.providerAccountId as string;
+        const login = profile && "login" in profile ? (profile as { login: string }).login : user.name ?? null;
+        await prisma.user.update({
+          where: { id: user.id },
+          data: {
+            githubId: providerAccountId,
+            username: login,
+            avatarUrl: user.image ?? undefined,
+          },
+        }).catch(() => {});
+      }
+    },
+  },
   secret: process.env.NEXTAUTH_SECRET,
   cookies: {
-    // Required on http://localhost so the OAuth callback can read state/code_verifier
-    useSecureCookies: process.env.NEXTAUTH_URL?.startsWith("https://") ?? false,
+    // Dev: always false so http://localhost matches getToken() cookie name (see lib/session.ts).
+    useSecureCookies: nextAuthUsesSecureCookies(),
   },
 } as NextAuthOptions;
 

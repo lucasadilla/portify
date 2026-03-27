@@ -129,16 +129,26 @@ export default async function ProjectPage({
     .map((a) => {
       let description: string | null = null;
       let kind: string | undefined;
+      let mermaidSource: string | null = null;
+      let recharts: unknown = undefined;
       if (a.metadata) {
         try {
-          const m = JSON.parse(a.metadata) as { description?: string; diagramKind?: string; kind?: string };
+          const m = JSON.parse(a.metadata) as {
+            description?: string;
+            diagramKind?: string;
+            kind?: string;
+            mermaidSource?: string;
+            recharts?: unknown;
+          };
           description = m.description ?? null;
           kind = m.diagramKind ?? m.kind;
+          mermaidSource = m.mermaidSource ?? null;
+          recharts = m.recharts;
         } catch {
           // ignore
         }
       }
-      return { id: a.id, url: a.url, description, kind };
+      return { id: a.id, url: a.url, description, kind, mermaidSource, recharts };
     });
 
   const defaultCaptions = [

@@ -8,14 +8,14 @@ import { getAllGitHubRepos } from "@/lib/github";
 
 /**
  * POST /api/portfolio/sync
- * Ensures portfolio exists, adds all public GitHub repos that aren't already
+ * Ensures portfolio exists, adds all GitHub repos you can access that aren't already
  * in the portfolio, and queues generation for each new repo.
  */
-export async function POST() {
+export async function POST(request: Request) {
   const session = await getServerSession(authOptions);
   if (!session?.user?.id) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-  const token = await getAccessToken();
+  const token = await getAccessToken(request);
   if (!token) return NextResponse.json({ error: "GitHub token missing" }, { status: 400 });
 
   let portfolio = await prisma.portfolio.findUnique({

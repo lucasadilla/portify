@@ -82,6 +82,7 @@ model Portfolio {
   contributionsJson    String?  @db.Text  // monthly contributions for account
   languagesJson        String?  @db.Text  // account-wide language mix
   githubJoinDate       String?            // ISO created_at from GitHub
+  visualAgentChartsJson String? @db.Text   // Visual SQL Agent charts JSON for /[slug] page
 
   user   User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   repos  PortfolioRepo[]
