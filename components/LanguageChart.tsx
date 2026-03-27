@@ -24,7 +24,7 @@ function CustomTooltip({ active, payload }: CustomTooltipProps) {
   const name = item.name ?? (item.payload as { name?: string })?.name ?? "";
   const value = item.value as number;
   return (
-    <div className="rounded-md border border-border bg-card px-3 py-2 text-xs">
+    <div className="rounded-md border border-border bg-card px-3 py-2 text-sm">
       <div className="font-medium text-foreground">{name}</div>
       <div className="text-muted-foreground">{value}%</div>
     </div>
@@ -36,17 +36,17 @@ export function LanguageChart({ data, className }: LanguageChartProps) {
   if (!data.length) return null;
   const withColors = data.map((d, i) => ({ ...d, color: d.color ?? COLORS[i % COLORS.length] }));
   return (
-    <div className={className}>
-      <h3 className="text-sm font-medium mb-2">Languages</h3>
-      <div className="h-[200px] w-full">
+    <div className={`min-w-0 w-full ${className ?? ""}`}>
+      <h3 className="text-base font-medium mb-2">Languages</h3>
+      <div className="h-[260px] w-full min-w-0 [&_.recharts-surface]:max-w-full">
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+          <PieChart margin={{ top: 6, right: 6, left: 6, bottom: 6 }}>
             <Pie
               data={withColors}
               cx="50%"
-              cy="50%"
-              innerRadius={50}
-              outerRadius={80}
+              cy="48%"
+              innerRadius="38%"
+              outerRadius="60%"
               paddingAngle={2}
               dataKey="value"
               nameKey="name"
@@ -68,7 +68,13 @@ export function LanguageChart({ data, className }: LanguageChartProps) {
               })}
             </Pie>
             <Tooltip content={<CustomTooltip />} />
-            <Legend layout="vertical" align="right" verticalAlign="middle" wrapperStyle={{ fontSize: 12 }} />
+            <Legend
+              layout="horizontal"
+              align="center"
+              verticalAlign="bottom"
+              iconSize={14}
+              wrapperStyle={{ fontSize: 13, width: "100%", color: "hsl(var(--muted-foreground))" }}
+            />
           </PieChart>
         </ResponsiveContainer>
       </div>

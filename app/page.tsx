@@ -168,12 +168,12 @@ export default async function HomePage() {
                         <span className="font-medium text-foreground/80">Contributions, languages & journey</span>
                         <span className="text-muted-foreground/80">Demo</span>
                       </div>
-                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5">
-                        <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 shadow-sm">
+                      <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 min-w-0">
+                        <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 shadow-sm min-w-0">
                           <EvolutionGraph data={HERO_EVOLUTION} className="space-y-1" />
                         </div>
-                        <div className="flex flex-col gap-2.5">
-                          <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 shadow-sm">
+                        <div className="flex flex-col gap-2.5 min-w-0">
+                          <div className="rounded-xl border border-border/60 bg-background/95 p-2.5 shadow-sm min-w-0">
                             <LanguageChart data={HERO_LANGUAGES} className="space-y-1" />
                           </div>
                           {/* Mini developer journey timeline */}
