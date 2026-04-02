@@ -100,6 +100,9 @@ type Props = {
   visualAgentCharts?: SavedVisualAgentChart[];
 };
 
+/** Stable default — inline `= []` in props would be a new array each render and break useEffect([visualAgentCharts]). */
+const EMPTY_VISUAL_AGENT_CHARTS: SavedVisualAgentChart[] = [];
+
 const MOCK_EVOLUTION: EvolutionPoint[] = [
   { month: "2024-01", commits: 12 },
   { month: "2024-02", commits: 19 },
@@ -296,7 +299,7 @@ export function PortfolioView({
   githubUsername,
   viewerUsername,
   isOwner,
-  visualAgentCharts = [],
+  visualAgentCharts = EMPTY_VISUAL_AGENT_CHARTS,
 }: Props) {
   const router = useRouter();
 

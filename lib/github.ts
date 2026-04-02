@@ -1,5 +1,55 @@
 const GITHUB_API = "https://api.github.com";
 
+/** GitHub rejects requests without a valid User-Agent (REST API requirement). */
+const GITHUB_USER_AGENT =
+  process.env.GITHUB_API_USER_AGENT ?? "Portify/1.0 (+https://github.com/octokit; Node.js fetch; visual-agent)";
+
+export function githubHeaders(accessToken: string): Record<string, string> {
+  return {
+    Authorization: `Bearer ${accessToken}`,
+    Accept: "application/vnd.github.v3+json",
+    "User-Agent": GITHUB_USER_AGENT,
+  };
+}
+
+/** Next.js may cache GET fetches; GitHub responses must be fresh for repo lists and dates. */
+const githubFetchInit = (accessToken: string): RequestInit => ({
+  cache: "no-store",
+  headers: githubHeaders(accessToken),
+});
+
+/** Ping GitHub — used to pick a working token (JWT vs DB) and validate OAuth. */
+export async function verifyGithubAccessToken(accessToken: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${GITHUB_API}/user`, {
+      cache: "no-store",
+      headers: githubHeaders(accessToken),
+    });
+    return res.ok;
+  } catch {
+    return false;
+  }
+}
+
+async function fetchGithubOrThrow(accessToken: string, url: string): Promise<Response> {
+  let last: Response | undefined;
+  for (let attempt = 0; attempt < 4; attempt++) {
+    last = await fetch(url, githubFetchInit(accessToken));
+    if (last.ok) return last;
+    if (last.status === 401 || last.status === 403) {
+      throw new Error(`GitHub API ${last.status}`);
+    }
+    if (last.status === 429 || (last.status >= 500 && last.status < 600)) {
+      const ra = last.headers.get("retry-after");
+      const sec = ra ? Math.min(60, Number(ra) || 1) : Math.min(10, attempt + 1);
+      await new Promise((r) => setTimeout(r, sec * 1000));
+      continue;
+    }
+    throw new Error(`GitHub API ${last.status}: ${url}`);
+  }
+  throw new Error(`GitHub API failed after retries: ${last?.status ?? "?"}`);
+}
+
 const mapRawToRepo = (r: RawRepo): GitHubRepo => ({
   id: r.id,
   fullName: r.full_name,
@@ -14,30 +64,13 @@ const mapRawToRepo = (r: RawRepo): GitHubRepo => ({
   createdAt: r.created_at,
 });
 
-export async function getGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
-  const res = await fetch(`${GITHUB_API}/user/repos?per_page=100&sort=updated`, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" },
-  });
-  if (!res.ok) throw new Error("Failed to fetch repos");
-  const data = await res.json();
-  return data.map((r: RawRepo) => mapRawToRepo(r));
-}
-
-/** Fetch all public repos across all pages (for portfolio sync). */
-export async function getAllGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
+async function getAllGitHubReposPaged(accessToken: string, extraQuery: string): Promise<GitHubRepo[]> {
   const all: GitHubRepo[] = [];
   let page = 1;
   const perPage = 100;
-  const headers: HeadersInit = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: "application/vnd.github.v3+json",
-  };
   while (true) {
-    const res = await fetch(
-      `${GITHUB_API}/user/repos?per_page=${perPage}&sort=updated&page=${page}`,
-      { headers }
-    );
-    if (!res.ok) throw new Error("Failed to fetch repos");
+    const url = `${GITHUB_API}/user/repos?per_page=${perPage}&sort=updated&page=${page}${extraQuery}`;
+    const res = await fetchGithubOrThrow(accessToken, url);
     const data = (await res.json()) as RawRepo[];
     const mapped = data.map((r) => mapRawToRepo(r));
     all.push(...mapped);
@@ -47,11 +80,106 @@ export async function getAllGitHubRepos(accessToken: string): Promise<GitHubRepo
   return all;
 }
 
+/** First page only (up to 100) — used for language aggregation and fallbacks. */
+export async function getGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
+  const url = `${GITHUB_API}/user/repos?per_page=100&sort=updated&affiliation=${encodeURIComponent("owner,collaborator,organization_member")}`;
+  const res = await fetchGithubOrThrow(accessToken, url);
+  const data = (await res.json()) as RawRepo[];
+  return data.map((r: RawRepo) => mapRawToRepo(r));
+}
+
+/** Fetch all accessible repos across all pages (owned, collaborator, org). */
+export async function getAllGitHubRepos(accessToken: string): Promise<GitHubRepo[]> {
+  const extra = `&affiliation=${encodeURIComponent("owner,collaborator,organization_member")}`;
+  return getAllGitHubReposPaged(accessToken, extra);
+}
+
+/** Same as getAllGitHubRepos but without affiliation filter — fallback if the stricter query fails. */
+export async function getAllGitHubReposRelaxed(accessToken: string): Promise<GitHubRepo[]> {
+  return getAllGitHubReposPaged(accessToken, "");
+}
+
+/** Single repo — same fields as list (id, created_at, …). */
+export async function fetchGitHubRepoByFullName(accessToken: string, repoFullName: string): Promise<GitHubRepo | null> {
+  const parts = repoFullName.split("/").map((s) => s.trim());
+  const owner = parts[0];
+  const repo = parts[1];
+  if (!owner || !repo) return null;
+  try {
+    const res = await fetch(
+      `${GITHUB_API}/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`,
+      githubFetchInit(accessToken)
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as RawRepo;
+    return mapRawToRepo(data);
+  } catch {
+    return null;
+  }
+}
+
+export type VisualAgentRepoSource = "github_list" | "github_first_page" | "github_per_repo" | "none";
+
+/**
+ * Full account repo list for the visual agent. Uses uncached fetches.
+ * If paginated /user/repos fails, tries first page only, then per-repo GET for portfolio-linked names (real GitHub created_at).
+ */
+export async function fetchGitHubReposForVisualAgent(
+  accessToken: string,
+  portfolioReposForFallback: { repoFullName: string }[]
+): Promise<{ repos: GitHubRepo[]; source: VisualAgentRepoSource }> {
+  let all: GitHubRepo[] = [];
+  try {
+    all = await getAllGitHubRepos(accessToken);
+  } catch {
+    try {
+      all = await getAllGitHubReposRelaxed(accessToken);
+    } catch {
+      all = [];
+    }
+  }
+  if (all.length === 0) {
+    try {
+      all = await getAllGitHubReposRelaxed(accessToken);
+    } catch {
+      // ignore
+    }
+  }
+  if (all.length > 0) return { repos: all, source: "github_list" };
+
+  try {
+    const page = await getGitHubRepos(accessToken);
+    if (page.length > 0) return { repos: page, source: "github_first_page" };
+  } catch {
+    try {
+      const relaxedPage = await getAllGitHubReposRelaxed(accessToken);
+      if (relaxedPage.length > 0) return { repos: relaxedPage.slice(0, 100), source: "github_first_page" };
+    } catch {
+      // continue
+    }
+  }
+
+  const perRepo: GitHubRepo[] = [];
+  const slice = portfolioReposForFallback.slice(0, 80);
+  const batchSize = 8;
+  for (let i = 0; i < slice.length; i += batchSize) {
+    const batch = slice.slice(i, i + batchSize);
+    const settled = await Promise.all(batch.map((r) => fetchGitHubRepoByFullName(accessToken, r.repoFullName)));
+    for (const repo of settled) {
+      if (repo) perRepo.push(repo);
+    }
+  }
+  if (perRepo.length > 0) return { repos: perRepo, source: "github_per_repo" };
+
+  return { repos: [], source: "none" };
+}
+
 export async function getGitHubUserProfile(
   accessToken: string
 ): Promise<{ login: string; createdAt: string; htmlUrl: string }> {
   const res = await fetch(`${GITHUB_API}/user`, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" },
+    cache: "no-store",
+    headers: githubHeaders(accessToken),
   });
   if (!res.ok) {
     throw new Error("Failed to fetch GitHub user profile");
@@ -66,7 +194,8 @@ export async function getGitHubUserProfile(
 
 export async function getRepoLanguages(accessToken: string, owner: string, repo: string): Promise<Record<string, number>> {
   const res = await fetch(`${GITHUB_API}/repos/${owner}/${repo}/languages`, {
-    headers: { Authorization: `Bearer ${accessToken}`, Accept: "application/vnd.github.v3+json" },
+    cache: "no-store",
+    headers: githubHeaders(accessToken),
   });
   if (!res.ok) return {};
   return await res.json();
@@ -125,10 +254,7 @@ export async function getRepoCommitHistory(
   const maxPagesPerYear = 10;
   const currentYear = new Date().getFullYear();
   const startYear = 2008;
-  const headers: HeadersInit = {
-    Authorization: `Bearer ${accessToken}`,
-    Accept: "application/vnd.github.v3+json",
-  };
+  const headers = githubHeaders(accessToken);
 
   // (We start with Search; if that fails completely we'll fall back to Stats below.)
 

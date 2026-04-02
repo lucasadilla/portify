@@ -25,7 +25,8 @@ CREATE TABLE repos (
   language TEXT NOT NULL DEFAULT '',
   stars INTEGER NOT NULL DEFAULT 0,
   forks INTEGER NOT NULL DEFAULT 0,
-  last_commit_date TEXT
+  last_commit_date TEXT,
+  created_at TEXT
 );
 
 CREATE TABLE commits (
@@ -42,21 +43,32 @@ CREATE TABLE language_shares (
   language TEXT PRIMARY KEY,
   percentage INTEGER NOT NULL
 );
+
+-- Scalar stats (e.g. total GitHub repo count from the API). Use for "how many repos" style questions.
+CREATE TABLE account_stats (
+  key TEXT PRIMARY KEY,
+  value INTEGER NOT NULL
+);
 `;
 
 export const VISUAL_AGENT_SCHEMA_FOR_LLM = `
 Tables (SQLite):
 
 users(id, username)
-repos(id, name, language, stars, forks, last_commit_date)  -- last_commit_date is ISO date string YYYY-MM-DD
+repos(id, name, language, stars, forks, last_commit_date, created_at)  -- last_commit_date: last activity; created_at: when the repo was created on GitHub (gh_* rows), or when added to portfolio (pf_* rows), ISO YYYY-MM-DD
 commits(id, repo_id, date, additions, deletions)             -- date is ISO date string YYYY-MM-DD
 language_shares(language, percentage)                        -- percentage 0–100; aggregated from GitHub language bytes (account or single repo)
+account_stats(key, value)                                      -- integer metrics; includes key 'github_repo_count' = total repositories on GitHub (when seeded)
 
 Important: Rows are seeded from monthly GitHub aggregates (one row per repo per month).
 For those rows, "additions" holds the monthly activity count (contributions or commits for that month, depending on source). "deletions" is unused (0).
 To total activity over a date range use SUM(additions), not COUNT(*). COUNT(*) counts months, not activity.
 
 For questions about programming languages, language mix, or pie charts of languages: query language_shares (SELECT language, percentage FROM language_shares ORDER BY percentage DESC). Do NOT use repos.language for account-level language pies — that column is a single label per repo, not a distribution.
+
+For questions about how many GitHub repositories the user has (total only, not over time): use SELECT value FROM account_stats WHERE key = 'github_repo_count', or SELECT COUNT(*) AS n FROM repos WHERE id LIKE 'gh_%' OR id LIKE 'pf_%' (gh_ = from GitHub API; pf_ = portfolio fallback; id 'account' is synthetic for contribution history).
+
+For questions about repositories created or opened over time, by month/year, or cumulative repos over time: use repos.created_at on rows where id LIKE 'gh_%' OR id LIKE 'pf_%'. Example: SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS count FROM repos WHERE (id LIKE 'gh_%' OR id LIKE 'pf_%') AND created_at IS NOT NULL GROUP BY strftime('%Y-%m', created_at) ORDER BY month. Do NOT use account_stats for time series.
 
 Relationships: commits.repo_id -> repos.id
 `;
@@ -110,8 +122,8 @@ export function seedAgentDatabase(
   let commitSeq = 0;
   for (const r of repos) {
     db.run(
-      "INSERT INTO repos (id, name, language, stars, forks, last_commit_date) VALUES (?, ?, ?, ?, ?, ?)",
-      [r.id, r.name, r.language, r.stars, r.forks, r.lastCommitDate]
+      "INSERT INTO repos (id, name, language, stars, forks, last_commit_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [r.id, r.name, r.language, r.stars, r.forks, r.lastCommitDate, null]
     );
     for (const row of r.monthlyCommits) {
       if (!row.month || row.commits <= 0) continue;
@@ -141,6 +153,98 @@ export function seedLanguageShares(
 }
 
 /** When language_shares is empty, approximate shares by counting repos' primary language (repos.language). */
+export const FALLBACK_GITHUB_REPO_COUNT_SQL = `SELECT 'GitHub repositories' AS name, value AS value FROM account_stats WHERE key = 'github_repo_count'`;
+
+/** Repos created per calendar month (GitHub API rows gh_* or portfolio fallback pf_*). */
+export const FALLBACK_REPOS_CREATED_BY_MONTH_SQL = `SELECT strftime('%Y-%m', created_at) AS month, COUNT(*) AS count FROM repos WHERE (id LIKE 'gh_%' OR id LIKE 'pf_%') AND created_at IS NOT NULL AND TRIM(created_at) != '' GROUP BY strftime('%Y-%m', created_at) ORDER BY month LIMIT 120`;
+
+export function hasGithubRepoCountInDb(db: SqliteDatabase): boolean {
+  try {
+    const r = db.exec("SELECT 1 FROM account_stats WHERE key = 'github_repo_count' LIMIT 1");
+    return (r[0]?.values?.length ?? 0) > 0;
+  } catch {
+    return false;
+  }
+}
+
+export function seedAccountStats(db: SqliteDatabase, entries: Record<string, number>): void {
+  for (const [key, value] of Object.entries(entries)) {
+    const k = key?.trim();
+    if (!k) continue;
+    const v = Math.max(0, Math.round(Number(value)));
+    db.run("INSERT OR REPLACE INTO account_stats (key, value) VALUES (?, ?)", [k, v]);
+  }
+}
+
+function isoDateOnly(iso: string | null | undefined): string | null {
+  if (!iso || typeof iso !== "string") return null;
+  const d = iso.trim().slice(0, 10);
+  if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+  const t = Date.parse(iso);
+  if (!Number.isNaN(t)) {
+    const x = new Date(t).toISOString().slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(x)) return x;
+  }
+  return null;
+}
+
+/** One row per GitHub repo (id gh_<numericId>) so COUNT and listings match the API when account_stats is present. */
+export function seedGithubReposForAgent(
+  db: SqliteDatabase,
+  repos: Array<{
+    id: number;
+    fullName: string;
+    name: string;
+    language: string | null;
+    stargazersCount: number;
+    createdAt: string;
+  }>,
+  maxRows = 2000
+): void {
+  for (const r of repos.slice(0, maxRows)) {
+    const id = `gh_${r.id}`;
+    const shortName = r.fullName.includes("/") ? (r.fullName.split("/").pop() ?? r.name) : r.name;
+    const created = isoDateOnly(r.createdAt);
+    db.run(
+      "INSERT OR REPLACE INTO repos (id, name, language, stars, forks, last_commit_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, shortName, r.language ?? "", Math.max(0, Math.round(r.stargazersCount ?? 0)), 0, null, created]
+    );
+  }
+}
+
+/** When the GitHub repo list API fails, still allow time-series from portfolio repo rows (created_at = added-to-portfolio). */
+export function seedPortfolioReposForAgent(
+  db: SqliteDatabase,
+  rows: Array<{ id: string; repoFullName: string; createdAt: Date | string }>
+): void {
+  for (const r of rows) {
+    const id = `pf_${r.id}`;
+    const shortName = r.repoFullName.includes("/")
+      ? (r.repoFullName.split("/").pop() ?? r.repoFullName)
+      : r.repoFullName;
+    const created =
+      r.createdAt instanceof Date
+        ? r.createdAt.toISOString().slice(0, 10)
+        : isoDateOnly(String(r.createdAt)) ?? "";
+    db.run(
+      "INSERT OR REPLACE INTO repos (id, name, language, stars, forks, last_commit_date, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
+      [id, shortName, "", 0, 0, null, created || null]
+    );
+  }
+}
+
+export function hasRepoCreatedTimeSeriesInDb(db: SqliteDatabase): boolean {
+  try {
+    const r = db.exec(
+      "SELECT COUNT(*) AS n FROM repos WHERE (id LIKE 'gh_%' OR id LIKE 'pf_%') AND created_at IS NOT NULL AND TRIM(created_at) != ''"
+    );
+    const v = r[0]?.values?.[0]?.[0];
+    return Number(typeof v === "number" ? v : Number(v)) > 0;
+  } catch {
+    return false;
+  }
+}
+
 export function seedLanguageSharesFromRepoLanguagesColumn(db: SqliteDatabase): void {
   try {
     const res = db.exec(
@@ -271,6 +375,21 @@ export function getAgentDatasetSummary(db: SqliteDatabase): string {
             .join("; ")
       );
     }
+
+    const ghPf = db.exec(
+      "SELECT COUNT(*) AS n, MIN(created_at) AS ca_min, MAX(created_at) AS ca_max FROM repos WHERE (id LIKE 'gh_%' OR id LIKE 'pf_%') AND created_at IS NOT NULL AND TRIM(created_at) != ''"
+    );
+    const gcols = ghPf[0]?.columns ?? [];
+    const grow = ghPf[0]?.values?.[0];
+    const gcn = gcols.indexOf("n");
+    const gcmin = gcols.indexOf("ca_min");
+    const gcmax = gcols.indexOf("ca_max");
+    if (grow && gcn >= 0 && Number(grow[gcn]) > 0) {
+      lines.push(
+        `repos with created_at (GitHub gh_* or portfolio pf_*): count=${String(grow[gcn])}, min=${String(grow[gcmin])}, max=${String(grow[gcmax])} — for repos opened/created over time, GROUP BY strftime('%Y-%m', created_at)`
+      );
+    }
+
     const users = db.exec("SELECT id, username FROM users");
     const uc = users[0]?.columns ?? [];
     const uv = users[0]?.values?.[0];
@@ -291,6 +410,19 @@ export function getAgentDatasetSummary(db: SqliteDatabase): string {
       lines.push(
         "language_shares (for pie charts of languages): " +
           lv.map((row) => `${String(row[li])}=${String(row[lp])}%`).join(", ")
+      );
+    }
+
+    const stats = db.exec("SELECT key, value FROM account_stats");
+    const sc = stats[0]?.columns ?? [];
+    const sv = stats[0]?.values ?? [];
+    const ski = sc.indexOf("key");
+    const svi = sc.indexOf("value");
+    if (sv.length && ski >= 0 && svi >= 0) {
+      lines.push(
+        "account_stats: " +
+          sv.map((row) => `${String(row[ski])}=${String(row[svi])}`).join("; ") +
+          " — for total GitHub repo count use SELECT value FROM account_stats WHERE key = 'github_repo_count'"
       );
     }
   } catch {

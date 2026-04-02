@@ -48,6 +48,31 @@ export function inferRechartsFromRows(rows: Record<string, unknown>[]): Recharts
 
   const map = keyMap(first);
 
+  // Single-cell aggregate (COUNT(*), SELECT value only, etc.) → one bar
+  if (rows.length === 1) {
+    const keys = Object.keys(first);
+    if (keys.length === 1 && isNumeric(first[keys[0]])) {
+      const k = keys[0];
+      const label =
+        /^(count|total|n|cnt)$/i.test(k) || /^count\(/i.test(k) || /^value$/i.test(k)
+          ? "Total"
+          : k.replace(/_/g, " ");
+      return { variant: "bar", data: [{ name: label, value: Math.round(Number(first[k])) }] };
+    }
+  }
+
+  const accountKey = pick(map, ["key"]);
+  const accountVal = pick(map, ["value"]);
+  if (accountKey && accountVal && accountKey !== accountVal) {
+    const data = rows.map((r) => {
+      const raw = String(r[accountKey] ?? "").trim();
+      const name =
+        raw === "github_repo_count" ? "GitHub repositories" : raw || "—";
+      return { name, value: Math.round(Number(r[accountVal] ?? 0)) };
+    });
+    if (data.length > 0) return { variant: "bar", data };
+  }
+
   const languageKey = pick(map, ["language", "lang"]);
   const pctKey = pick(map, ["percentage", "percent", "pct", "share", "value"]);
   if (languageKey && pctKey) {
@@ -61,7 +86,19 @@ export function inferRechartsFromRows(rows: Record<string, unknown>[]): Recharts
   }
 
   const monthKey = pick(map, ["month", "period", "ym"]);
-  const seriesKey = pick(map, ["activity", "commits", "total", "sum", "additions", "count", "value"]);
+  const seriesKey = pick(map, [
+    "activity",
+    "commits",
+    "total",
+    "sum",
+    "additions",
+    "count",
+    "value",
+    "n",
+    "cnt",
+    "repos",
+    "repos_created",
+  ]);
   if (monthKey && seriesKey) {
     const data = rows.map((r) => ({
       month: String(r[monthKey] ?? "").trim(),

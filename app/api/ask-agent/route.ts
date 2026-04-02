@@ -15,6 +15,9 @@ import {
   countLanguageShareRows,
   seedLanguageShares,
   seedLanguageSharesFromRepoLanguagesColumn,
+  seedAccountStats,
+  seedGithubReposForAgent,
+  seedPortfolioReposForAgent,
 } from "@/lib/sql";
 import {
   buildProfileDataset,
@@ -22,7 +25,7 @@ import {
   liveRepoActivityToSeed,
 } from "@/lib/visual-agent-dataset";
 import { sessionCanEditPortfolio } from "@/lib/portfolioAccess";
-import { getAccessToken } from "@/lib/session";
+import { resolveWorkingGitHubToken } from "@/lib/session";
 import {
   getContributionHistoryFromGraphQL,
   getContributionHistoryByAuthor,
@@ -30,6 +33,7 @@ import {
   getRepoCommitHistory,
   getRepoLanguages,
   getAccountLanguagePercentages,
+  fetchGitHubReposForVisualAgent,
   languageBytesToPercentages,
 } from "@/lib/github";
 
@@ -53,6 +57,8 @@ export function GET() {
     },
     response: {
       dataSource: "github_live | github_cached",
+      githubRepoSource:
+        "github_list | github_first_page | github_per_repo | portfolio_only — where repo rows for charts came from",
       title: "short display title (not the full prompt)",
       recharts: "pie | line | bar payload or null — when set, use Recharts like other portfolio charts",
       mermaid: "diagram source when recharts is null",
@@ -92,6 +98,7 @@ export async function POST(req: Request) {
 
   const db = await createEmptyAgentDatabase();
   let dataSource: "github_live" | "github_cached" = "github_cached";
+  let githubRepoSource: "github_list" | "github_first_page" | "github_per_repo" | "portfolio_only" | null = null;
 
   try {
     if (scope === "repo") {
@@ -115,7 +122,7 @@ export async function POST(req: Request) {
         id: "u1",
         username: repo.portfolio.user.username?.trim() || "developer",
       };
-      const accessToken = await getAccessToken(req);
+      const accessToken = await resolveWorkingGitHubToken(req, session.user.id);
       const [owner, repoShort] = repo.repoFullName.split("/");
       let repoLangBytes: Record<string, number> | null = null;
       if (accessToken && owner && repoShort) {
@@ -187,7 +194,7 @@ export async function POST(req: Request) {
         session.user.username?.trim() ||
         session.user.name?.trim() ||
         "developer";
-      const accessToken = await getAccessToken(req);
+      const accessToken = await resolveWorkingGitHubToken(req, session.user.id);
 
       type Monthly = { month: string; commits: number };
       let monthlyLive: Monthly[] | null = null;
@@ -329,6 +336,37 @@ export async function POST(req: Request) {
           // ignore
         }
       }
+
+      const portfolioRepoNamesForGithub = await prisma.portfolioRepo.findMany({
+        where: { portfolioId: portfolio.id },
+        select: { repoFullName: true },
+      });
+
+      if (accessToken) {
+        const { repos: ghRepos, source } = await fetchGitHubReposForVisualAgent(
+          accessToken,
+          portfolioRepoNamesForGithub
+        );
+        if (ghRepos.length > 0) {
+          seedAccountStats(db, { github_repo_count: ghRepos.length });
+          seedGithubReposForAgent(db, ghRepos);
+          githubRepoSource =
+            source === "github_list"
+              ? "github_list"
+              : source === "github_first_page"
+                ? "github_first_page"
+                : "github_per_repo";
+        } else if (portfolio.repos.length > 0) {
+          seedAccountStats(db, { github_repo_count: portfolio.repos.length });
+          seedPortfolioReposForAgent(db, portfolio.repos);
+          githubRepoSource = "portfolio_only";
+        }
+      } else if (portfolio.repos.length > 0) {
+        seedAccountStats(db, { github_repo_count: portfolio.repos.length });
+        seedPortfolioReposForAgent(db, portfolio.repos);
+        githubRepoSource = "portfolio_only";
+      }
+
       if (countLanguageShareRows(db) === 0) {
         seedLanguageSharesFromRepoLanguagesColumn(db);
       }
@@ -363,6 +401,7 @@ export async function POST(req: Request) {
       recharts,
       mermaid: recharts ? "" : mermaid,
       dataSource,
+      githubRepoSource,
     });
   } finally {
     closeDatabase(db);

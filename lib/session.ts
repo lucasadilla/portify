@@ -4,6 +4,7 @@ import { cookies, headers } from "next/headers";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/db";
 import { nextAuthUsesSecureCookies } from "@/lib/nextAuthCookies";
+import { verifyGithubAccessToken } from "@/lib/github";
 
 export async function getSession() {
   return getServerSession(authOptions);
@@ -67,4 +68,31 @@ export async function getAccessTokenForUser(userId: string): Promise<string | nu
     where: { userId, provider: "github" },
   });
   return account?.access_token ?? null;
+}
+
+/**
+ * Prefer a token that actually works with GitHub. JWT and DB tokens can differ (e.g. stale JWT after DB refresh).
+ */
+export async function resolveWorkingGitHubToken(
+  request: Request | undefined,
+  userId: string
+): Promise<string | null> {
+  const seen = new Set<string>();
+  const candidates: string[] = [];
+
+  const fromJwt = await getAccessToken(request);
+  if (fromJwt && !seen.has(fromJwt)) {
+    seen.add(fromJwt);
+    candidates.push(fromJwt);
+  }
+  const fromDb = await getAccessTokenForUser(userId);
+  if (fromDb && !seen.has(fromDb)) {
+    seen.add(fromDb);
+    candidates.push(fromDb);
+  }
+
+  for (const t of candidates) {
+    if (await verifyGithubAccessToken(t)) return t;
+  }
+  return candidates[0] ?? null;
 }

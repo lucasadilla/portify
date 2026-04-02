@@ -33,6 +33,8 @@ type AgentResponse = {
   recharts: RechartsPayload | null;
   mermaid: string;
   dataSource?: "github_live" | "github_cached";
+  /** Where repo rows (counts, created_at) came from for profile questions */
+  githubRepoSource?: "github_list" | "github_first_page" | "github_per_repo" | "portfolio_only" | null;
 };
 
 type Props = {
@@ -188,6 +190,8 @@ export function AskAgent({ scope, portfolioSlug, portfolioRepoId, portfolioId, o
         <p className="text-xs text-muted-foreground font-normal">
           Each question loads data from GitHub when you&apos;re signed in. Numeric data uses the same charts as
           languages and contributions; other answers use a diagram. Saved items appear in the charts section.
+          Repo timelines use each repository&apos;s creation date on GitHub when the full list loads (not only
+          projects generated in Portify).
         </p>
       </CardHeader>
       <CardContent className="space-y-3">
@@ -231,6 +235,25 @@ export function AskAgent({ scope, portfolioSlug, portfolioRepoId, portfolioId, o
                 maxLength={120}
               />
             </div>
+            {scope === "profile" && result.githubRepoSource === "portfolio_only" && (
+              <p className="text-xs text-amber-600 dark:text-amber-500/90 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+                GitHub could not load your full repo list (sign in with GitHub or try again). Charts use only
+                repositories linked to this portfolio and Portify import dates — not your full account or real
+                repo creation dates on GitHub.
+              </p>
+            )}
+            {scope === "profile" && result.githubRepoSource === "github_per_repo" && (
+              <p className="text-xs text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-2 py-1.5">
+                Full repo list was unavailable; metadata was loaded per linked project. Counts may be incomplete;
+                dates are real GitHub creation times for those repos.
+              </p>
+            )}
+            {scope === "profile" && result.githubRepoSource === "github_first_page" && (
+              <p className="text-xs text-muted-foreground rounded-md border border-border/60 bg-muted/30 px-2 py-1.5">
+                Loaded the first page of your repos from GitHub; if you have more than 100, the chart may be
+                incomplete.
+              </p>
+            )}
             {result.recharts ? (
               <VisualAgentDataChart payload={result.recharts} />
             ) : (
